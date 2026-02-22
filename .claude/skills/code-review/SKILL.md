@@ -30,8 +30,7 @@ git log main..HEAD --oneline
 #### 1. コード品質
 
 詳細なガイドラインは必要に応じて以下を参照する:
-- **命名**: [references/naming.md](references/naming.md) — 認知的負荷の最小化、ビジネス用語の使用、副作用の示唆など
-- **開発戦略**: [../../references/development-strategy.md](../../references/development-strategy.md) — ETC原則、DDD、継承より集約、サービスオブジェクトの判断基準
+- **開発戦略・命名**: [../../references/development-strategy.md](../../references/development-strategy.md) — ETC原則、DDD、継承より集約、サービスオブジェクトの判断基準、命名ガイドライン
 
 - 可読性: 命名の明確さ、適切な抽象化レベル、複雑すぎるロジックがないか
 - 設計原則: SOLID原則の遵守、DRY違反、不必要な結合・依存がないか
