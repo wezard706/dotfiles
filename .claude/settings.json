@@ -1,0 +1,15 @@
+{
+    "permissions": {
+      "allowedTools": [
+        "Bash(find *)",
+        "Bash(grep *)",
+        "Bash(ls *)",
+        "Bash(cp *)",
+        "Bash(rg *)",
+        "Bash(mkdir *)",
+        "Bash(mv *)"
+      ],
+      "deny": []
+    }
+  }
+  
