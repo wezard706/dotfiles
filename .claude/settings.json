@@ -7,7 +7,17 @@
         "Bash(cp *)",
         "Bash(rg *)",
         "Bash(mkdir *)",
-        "Bash(mv *)"
+        "Bash(mv *)",
+        "Bash(git diff: *)",
+        "Bash(git log: *)",
+        "Bash(git show: *)",
+        "Bash(git checkout: *)",
+        "Bash(git branch: *)",
+        "Bash(git grep: *)",
+        "Bash(gh pr view: *)",
+        "Bash(gh pr list: *)",
+        "Bash(gh pr diff: *)"
+
       ],
       "deny": []
     }
