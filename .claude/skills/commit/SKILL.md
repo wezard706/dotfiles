@@ -1,6 +1,6 @@
 ---
 name: commit
-description: git commitを作成する
+description: git commitを作成する。「コミットして」「commitして」などのリクエスト時にトリガーする。
 ---
 
 # Commit
