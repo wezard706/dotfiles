@@ -3,13 +3,14 @@ set -e
 
 # Dotfiles Installer
 # This script installs:
-#   - Claude Code skills and CLAUDE.md
+#   - Claude Code skills, CLAUDE.md, rules, and settings.json
 # Run this script from the cloned repository directory
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$SCRIPT_DIR/.claude"
 CLAUDE_DIR="$HOME/.claude"
 SKILLS_DIR="$CLAUDE_DIR/skills"
+RULES_DIR="$CLAUDE_DIR/rules"
 
 echo "Installing dotfiles..."
 echo ""
@@ -25,10 +26,27 @@ fi
 echo "🧹 Cleaning existing configurations..."
 rm -rf "$SKILLS_DIR"
 mkdir -p "$SKILLS_DIR"
+rm -rf "$RULES_DIR"
+mkdir -p "$RULES_DIR"
 
 # Install CLAUDE.md
 echo "📝 Installing CLAUDE.md..."
 cp "$SOURCE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
+
+# Install settings.json
+echo "⚙️  Installing settings.json..."
+cp "$SOURCE_DIR/settings.json" "$CLAUDE_DIR/settings.json"
+
+# Install rules
+echo ""
+echo "📋 Installing rules..."
+for rule_file in "$SOURCE_DIR"/rules/*.md; do
+    if [ -f "$rule_file" ]; then
+        rule_name=$(basename "$rule_file")
+        echo "   Installing rule: $rule_name"
+        cp "$rule_file" "$RULES_DIR/$rule_name"
+    fi
+done
 
 # Install skills
 echo ""
@@ -47,6 +65,12 @@ echo "Installation complete!"
 echo ""
 echo "Installed files:"
 echo "  - $CLAUDE_DIR/CLAUDE.md"
+echo "  - $CLAUDE_DIR/settings.json"
+for rule_file in "$RULES_DIR"/*.md; do
+    if [ -f "$rule_file" ]; then
+        echo "  - $rule_file"
+    fi
+done
 for skill_dir in "$SKILLS_DIR"/*/; do
     if [ -d "$skill_dir" ]; then
         echo "  - $skill_dir"
