@@ -8,3 +8,7 @@
 	lo = log --oneline
 	sw = switch
 	br = !git for-each-ref --sort=-committerdate refs/heads/ --format='%(committerdate:short) %(authorname) %(refname:short)' | head -5
+	wta = "!f() { git worktree add \"../$1\" \"$1\"; }; f"
+	wtls = worktree list
+	wtrm = "!f() { git worktree remove \"../$1\"; }; f"
+	wtp = worktree prune
