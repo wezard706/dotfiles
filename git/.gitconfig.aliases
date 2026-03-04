@@ -1,0 +1,10 @@
+[alias]
+	a = add
+	au = add -u
+	c = commit
+	co = checkout
+	s = status
+	l = log
+	lo = log --oneline
+	sw = switch
+	br = for-each-ref --sort=-committerdate refs/heads/ --format="%(committerdate:short) %(authorname) %(refname:short)" | head -5

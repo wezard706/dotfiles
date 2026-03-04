@@ -11,8 +11,17 @@ SOURCE_DIR="$SCRIPT_DIR/.claude"
 CLAUDE_DIR="$HOME/.claude"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 RULES_DIR="$CLAUDE_DIR/rules"
+GIT_SOURCE_DIR="$SCRIPT_DIR/git"
 
 echo "Installing dotfiles..."
+echo ""
+
+# Install git aliases
+echo "🔧 Installing git aliases..."
+cp "$GIT_SOURCE_DIR/.gitconfig.aliases" "$HOME/.gitconfig.aliases"
+if ! grep -q 'path = ~/.gitconfig.aliases' "$HOME/.gitconfig" 2>/dev/null; then
+    printf '\n[include]\n\tpath = ~/.gitconfig.aliases\n' >> "$HOME/.gitconfig"
+fi
 echo ""
 
 # Check if source directory exists
@@ -64,6 +73,7 @@ echo ""
 echo "Installation complete!"
 echo ""
 echo "Installed files:"
+echo "  - $HOME/.gitconfig.aliases"
 echo "  - $CLAUDE_DIR/CLAUDE.md"
 echo "  - $CLAUDE_DIR/settings.json"
 for rule_file in "$RULES_DIR"/*.md; do
