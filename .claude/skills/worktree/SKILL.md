@@ -5,7 +5,7 @@ description: git worktreeの作成・管理・削除を支援する。「/worktr
 
 # Worktree
 
-git worktreeをサブコマンド形式で操作します。worktreeは常に `.claude/worktrees/<name>/` に作成します。
+git worktreeをサブコマンド形式で操作します。worktreeは常に `~/.worktrees/<name>/` に作成します。
 
 ## サブコマンド一覧
 
@@ -25,8 +25,8 @@ git worktreeをサブコマンド形式で操作します。worktreeは常に `.
 `<name>` が省略されていれば目的を聞いてブランチ名を提案する。
 
 ```bash
-mkdir -p .claude/worktrees
-git worktree add .claude/worktrees/<name> -b <name>
+mkdir -p ~/.worktrees
+git worktree add ~/.worktrees/<name> -b <name>
 ```
 
 完了後、作業ディレクトリのフルパスを伝える。
@@ -46,8 +46,8 @@ git worktree add .claude/worktrees/<name> -b <name>
 
 3. worktreeを追加する：
    ```bash
-   mkdir -p .claude/worktrees
-   git worktree add .claude/worktrees/<branch> <branch>
+   mkdir -p ~/.worktrees
+   git worktree add ~/.worktrees/<branch> <branch>
    ```
 
 完了後、作業ディレクトリのフルパスを伝える。
@@ -61,7 +61,7 @@ worktreeを削除します。
 1. `<name>` が省略されていれば `git worktree list` で一覧を出して選んでもらう
 2. worktreeを削除する：
    ```bash
-   git worktree remove .claude/worktrees/<name>
+   git worktree remove ~/.worktrees/<name>
    ```
 3. ブランチも削除するか確認する（マージ済みなら削除を提案する）：
    ```bash
