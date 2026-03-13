@@ -1,3 +1,8 @@
+---
+paths:
+  - *.rb  
+---
+
 # Ruby on Rails コーディング原則
 
 - リッチドメインモデル（Rich Domain Model）を推奨します
