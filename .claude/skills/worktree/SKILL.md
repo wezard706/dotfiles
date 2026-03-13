@@ -1,6 +1,6 @@
 ---
 name: worktree
-description: git worktreeの作成・管理・削除を支援する。「/worktree create <name>」「/worktree checkout <branch>」「/worktree delete <name>」「/worktree list」などのサブコマンドで操作する。「worktreeを作成して」「worktreeで作業したい」「並行して作業したい」「別ブランチを同時に開きたい」などのリクエスト時にもトリガーする。worktreeに関する操作を求められたら必ずこのスキルを使うこと。
+description: git worktreeの作成・管理・削除を支援する。「/worktree create <name>」「/worktree checkout <branch>」「/worktree setup <name>」「/worktree delete <name>」「/worktree list」などのサブコマンドで操作する。「worktreeを作成して」「worktreeで作業したい」「並行して作業したい」「別ブランチを同時に開きたい」「worktreeをセットアップして」「worktreeの環境構築をして」などのリクエスト時にもトリガーする。worktreeに関する操作を求められたら必ずこのスキルを使うこと。
 ---
 
 # Worktree
@@ -13,6 +13,7 @@ git worktreeをサブコマンド形式で操作します。worktreeは常に `~
 |---|---|
 | `/worktree create <name>` | 新規ブランチ + worktreeを作成 |
 | `/worktree checkout <branch>` | 既存ブランチのworktreeを追加 |
+| `/worktree setup <name>` | worktreeの開発環境をセットアップ |
 | `/worktree delete <name>` | worktreeを削除 |
 | `/worktree list` | worktree一覧を表示 |
 
@@ -51,6 +52,46 @@ git worktree add ~/.worktrees/<name> -b <name>
    ```
 
 完了後、作業ディレクトリのフルパスを伝える。
+
+---
+
+## `/worktree setup <name>`
+
+worktreeの開発環境をセットアップします。作成直後のworktreeで依存関係インストールや環境設定を一括実行します。
+
+1. `<name>` が省略されている場合：
+   - カレントディレクトリが worktree かどうかを確認する：
+     ```bash
+     git worktree list
+     ```
+     カレントディレクトリが worktree の一覧に含まれていれば、そのまま使用する。
+   - カレントディレクトリが worktree でなければ、一覧を表示して選んでもらう。
+2. worktreeのパスを確認する：
+   ```bash
+   git worktree list
+   ```
+3. worktreeディレクトリに移動してプロジェクト種別を検出し、対応するセットアップを実行する：
+
+   **Docker Compose**：
+   依存関係インストールより先に Docker を起動する。
+   worktreeディレクトリ配下の `docker-compose.yml` / `compose.yml` を検索し、見つかったファイルのディレクトリに移動してから起動する。
+   複数見つかった場合はユーザーに選んでもらう。
+   ```bash
+   # 例: backend/docker-compose.yml が見つかった場合
+   cd <worktree_path>/backend
+   docker compose up -d
+   cd <worktree_path>  # worktreeルートに戻る
+   ```
+
+4. `.env` ファイルが元のリポジトリに存在する場合、worktreeにコピーするか確認する：
+   ```bash
+   # 元リポジトリに .env があり、worktreeに存在しない場合
+   cp <repo_root>/.env ~/.worktrees/<name>/.env
+   ```
+
+5. `bin/setup` または `script/setup` が存在する場合は、それを実行するか確認する。
+
+完了後、セットアップした内容の一覧を表示する。
 
 ---
 
