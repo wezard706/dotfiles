@@ -1,5 +1,6 @@
 ---
 name: permission
+context: fork
 description: |
   Claude Code の .claude/settings.local.json の permission 設定を更新するスキル。
   以下のような場面で必ず使うこと:
