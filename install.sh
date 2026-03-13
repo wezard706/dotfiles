@@ -31,12 +31,11 @@ if [ ! -d "$SOURCE_DIR" ]; then
     exit 1
 fi
 
-# Clean and recreate directories
-echo "🧹 Cleaning existing configurations..."
-rm -rf "$SKILLS_DIR"
-mkdir -p "$SKILLS_DIR"
+# Clean and recreate rules directory; preserve existing skills
+echo "🧹 Cleaning existing rule configurations..."
 rm -rf "$RULES_DIR"
 mkdir -p "$RULES_DIR"
+mkdir -p "$SKILLS_DIR"
 
 # Install CLAUDE.md
 echo "📝 Installing CLAUDE.md..."
