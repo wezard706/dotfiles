@@ -1,6 +1,6 @@
 ---
 paths:
-  - *.rb  
+  - "**/*.rb"
 ---
 
 # Ruby on Rails コーディング原則
