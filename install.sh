@@ -3,7 +3,7 @@ set -e
 
 # Dotfiles Installer
 # This script installs:
-#   - Claude Code skills, CLAUDE.md, rules, and settings.json
+#   - Claude Code skills, CLAUDE.md, and rules
 # Run this script from the cloned repository directory
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,10 +41,6 @@ mkdir -p "$SKILLS_DIR"
 echo "📝 Installing CLAUDE.md..."
 cp "$SOURCE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
 
-# Install settings.json
-echo "⚙️  Installing settings.json..."
-cp "$SOURCE_DIR/settings.json" "$CLAUDE_DIR/settings.json"
-
 # Install rules
 echo ""
 echo "📋 Installing rules..."
@@ -74,7 +70,6 @@ echo ""
 echo "Installed files:"
 echo "  - $HOME/.gitconfig.aliases"
 echo "  - $CLAUDE_DIR/CLAUDE.md"
-echo "  - $CLAUDE_DIR/settings.json"
 for rule_file in "$RULES_DIR"/*.md; do
     if [ -f "$rule_file" ]; then
         echo "  - $rule_file"
