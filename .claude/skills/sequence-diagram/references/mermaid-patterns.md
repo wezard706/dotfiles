@@ -2,6 +2,8 @@
 
 シーケンス図生成でよく使う記法パターン集。実装で迷ったらここを参照。
 
+> **注意**: このスキルは正常系（ハッピーパス）のみを描く。エラー処理・例外・失敗分岐を表現する記法（`->x`/`-->x` のエラー矢印、`critical` ブロック等）は使わない。`alt`・`opt` も両方とも正常終了する分岐に限って使う。
+
 ---
 
 ## 基本形
@@ -16,7 +18,6 @@ sequenceDiagram
 
 - `->>`: 実線矢印（同期呼び出し）
 - `-->>`: 点線矢印（レスポンス・非同期）
-- `->x` `-->x`: エラー・失敗
 - `participant X as Y`: エイリアス（X が短縮名、Y が表示名）
 
 ---
@@ -60,17 +61,18 @@ sequenceDiagram
 sequenceDiagram
     participant Svc
     participant DB
-    Svc->>DB: SELECT user
-    alt ユーザーが存在する
+    Svc->>DB: SELECT user by email
+    alt 既存ユーザー
         DB-->>Svc: user
         Svc->>DB: UPDATE last_login_at
-    else ユーザーが存在しない
+    else 新規ユーザー
         DB-->>Svc: nil
-        Svc->>Svc: raise NotFound
+        Svc->>DB: INSERT users
     end
 ```
 
-- 重要な業務分岐のみ使う
+- **両方のブランチが正常終了する分岐のみ**使う（例: 新規/更新の判定、初回/2回目以降）
+- エラー・例外・失敗を伴う分岐には使わない（正常系のみ描く方針）
 - 分岐が多いとすぐに読めなくなるので厳選
 
 ---
@@ -176,25 +178,6 @@ sequenceDiagram
 - `Note left of X`・`Note right of X`・`Note over X,Y`
 - `<br/>` で改行
 - 動的ディスパッチ・推測部分・前提条件などを補足
-
----
-
-## Critical（クリティカルセクション・例外伴う）
-
-```mermaid
-sequenceDiagram
-    participant Svc
-    participant DB
-    critical DB書き込み
-        Svc->>DB: INSERT
-    option タイムアウト
-        Svc->>Svc: リトライ
-    option 接続エラー
-        Svc->>Svc: raise
-    end
-```
-
-`alt` よりも「障害ハンドリング」の意味が強いときに使う。通常は `alt` で足りる。
 
 ---
 
