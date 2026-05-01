@@ -129,19 +129,30 @@ sequenceDiagram
 
 ---
 
-## 非同期ジョブのenqueue
+## 非同期ジョブのenqueueとジョブ本体（同じ図に続けて描く）
 
 ```mermaid
 sequenceDiagram
+    participant Ctrl as UsersController
     participant Svc as UserService
+    participant DB
     participant Queue as Job Queue
+    participant Job as WelcomeEmailJob
+    participant Mailer as UserMailer
+
+    Ctrl->>Svc: register(params)
+    Svc->>DB: INSERT users
     Svc--)Queue: WelcomeEmailJob をenqueue
-    Note over Svc,Queue: 非同期（別シーケンスで詳細）
+    Note over Svc,Queue: 非同期境界（ここから先はジョブワーカー側で実行）
+    Svc-->>Ctrl: User
+    Queue--)Job: perform(user_id)
+    Job->>Mailer: welcome_email(user).deliver_now
 ```
 
 - `--)` は非同期を示す矢印（点線・open arrow）
-- `Note over ...` で非同期境界であることを明示
-- ジョブ本体は**別の`sequenceDiagram`ブロック**として同じファイル内の別見出しに配置
+- `Note over ...` で非同期境界を明示し、それ以降がワーカー側の処理であることを示す
+- ジョブ本体（`perform`内部）は**同じ`sequenceDiagram`ブロック内の続き**として描く（別図には分けない）。Controller への return とジョブ実行はどちらも非同期境界の後ろに並べてよい
+- 1リクエストで複数のジョブをenqueueする場合は、それぞれの enqueue → perform を順番に並べる
 
 ---
 
