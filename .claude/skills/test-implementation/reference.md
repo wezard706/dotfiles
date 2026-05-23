@@ -31,29 +31,29 @@ end
 
 ## Arrange-Act-Assert（AAA）パターン
 
-各テストケースを3つのブロックに分けて記述する。
+テストは Arrange（前提準備）→ Act（実行）→ Assert（検証）の3要素で構成する。ただし **Arrange は原則 `it` の外に出す**（`let!`/`let`/`before`）。`it` のボディに残すのは Act と Assert だけにすると、各テストが「何を実行して何を期待するか」に絞られ、context ごとの前提の差分も `let`/`before` 側で見比べられる。
 
-| ブロック | 内容 |
+| ブロック | 置き場所 |
 |---------|------|
-| Arrange | 前提条件のセットアップ（DBデータ、オブジェクトの状態など） |
-| Act     | テスト対象メソッドの実行 |
-| Assert  | 戻り値・副作用の検証 |
+| Arrange | `let!`/`let`/`before`（`it` の外）。使い分けは後述の「let / let! / before の使い分け」 |
+| Act     | `it` のボディ |
+| Assert  | `it` のボディ |
 
 **Act と Assert の間は1行空ける**。「実行」と「検証」の境界が視覚的に分かれ、テストの構造が読み取りやすくなる。
 
 ```ruby
-# 良い例: Act と Assert の間に空行
-it '合計金額を返すこと' do
-  order = build(:order, items: items)   # Arrange
+# 良い例: Arrange は let に外出し、it は Act/Assert だけ
+let!(:order) { build(:order, items:) }
 
+it '合計金額を返すこと' do
   total = order.calculate_total         # Act
 
   expect(total).to eq 1000              # Assert
 end
 
-# 悪い例: Act と Assert が詰まっていて境界が分かりにくい
+# 悪い例: Arrange を it のボディにベタ書きしている
 it '合計金額を返すこと' do
-  order = build(:order, items: items)
+  order = build(:order, items:)
   total = order.calculate_total
   expect(total).to eq 1000
 end
@@ -63,16 +63,26 @@ end
 
 ---
 
-## describe / context の使い分け
+## describe / context / it の使い分け
+
+describe/context/it の命名規約は、**設計（test-design のアウトライン）と実装で共通の正本**。両フェーズともここに従って名前を付ける。
 
 - `describe`: テスト対象そのもの（クラス名・メソッド名）
-- `context`: テスト実行時の前提条件・状態（`〜の場合` で記述）
-- `it`: 期待結果（`〜すること` で記述）
+- `context`: テスト実行時の前提条件・状態。**場合分け（入力・前提の区分）はすべて context に置く**。**「〜の場合」で終える**
+- `it`: **期待結果だけ**を述べる。**「〜こと」で終える**（`true を返すこと` / `残高が1減ること`）。**前提・入力の条件を `it` に書かない**
+
+**主語・目的語を省略しない。テスト・メソッド上の役割語で呼ばない**。「対象」「判定対象」「それ」「入力」「パラメータ」のような語は、メソッドのシグネチャを知らない読み手には何を指すか伝わらない。メソッド引数を context に持ち込むときは、その役割名ではなく **それがドメインで何を意味するか**で表す。多くは「誰が何をした」という**イベント**で書くと自然になる。
+
+- 悪い: `判定対象が被招待者の初回モニター投稿の場合`（「判定対象」が何か不明）
+- 良い: `被招待者が初めてモニター投稿した場合`（引数 `monitor_post` を投稿イベントとして表現）
+- 良い: `達成済み` ではなく `リファラルが達成済み`（主語を明示）
+
+`context` 名 + `it` 名をつなげて読むと **テスト対象の仕様を説明する自然な一文**になり、かつ読み手がメソッドのシグネチャを知らなくても理解できるのがゴール（`被招待者がコーチでない場合` → `false を返すこと`）。`it` 名に「〜の場合/〜のとき」が現れたら、それは context に移すべき条件のサイン。
 
 ```ruby
 RSpec.describe Stack, type: :model do
   describe '#push' do
-    context '文字列をpushしたとき' do
+    context '文字列をpushした場合' do
       it '返り値がpushした値であること' do
         expect(stack.push('value')).to eq 'value'
       end
@@ -82,6 +92,31 @@ RSpec.describe Stack, type: :model do
       it 'ArgumentErrorになること' do
         expect { stack.push(nil) }.to raise_error(ArgumentError)
       end
+    end
+  end
+end
+```
+
+### 条件にラベルを振らない
+
+複合条件（`a && b && c`）を網羅するときも、条件にラベルを振って名前から参照しない。`A`/`B`/`C`、`C1`/`C2`/`C3`、`条件1`、真偽組合せ（`TTT`/`FTT`、`C1=T, C2=F`）といった記号は **context/it 名にもコメントにも書かない**。読み手が凡例と名前を往復しないと意味が取れなくなるため。条件は context 名の中に**言葉そのまま**で書く（`被招待者がコーチでない場合`）。
+
+複合条件 AND の条件網羅（`coach? && first_post? && not_achieved?`）の例。各条件を1つだけ偽にして false を確かめる。**context は前提を主語・目的語つき（引数はイベントとして）述べ、`it` は結果だけを述べる**。
+
+```ruby
+RSpec.describe Objects::ReferralAchievementPolicy do
+  describe '#achievable?' do
+    context '被招待者がコーチで、初めてモニター投稿し、リファラルが未達成の場合' do
+      it 'true を返すこと'
+    end
+    context '被招待者がコーチでない場合' do
+      it 'false を返すこと'
+    end
+    context '被招待者が2回目以降のモニター投稿をした場合' do
+      it 'false を返すこと'
+    end
+    context 'リファラルが既に達成済みの場合' do
+      it 'false を返すこと'
     end
   end
 end
