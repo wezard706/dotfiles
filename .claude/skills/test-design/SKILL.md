@@ -138,7 +138,16 @@ end
 
 ## 出力先
 
-成果物は `./tmp/test-design/<SUT名>-cases.rb`（RSpec アウトライン、spec ファイルの骨格）に保存する。`<SUT名>` はテスト対象のクラス・メソッド名から派生（例: `account-withdraw`）。このアウトラインを test-implementation スキルが実装に展開する。
+成果物（RSpec アウトライン）は、**テスト対象に対応する spec ファイルのパス**に出力する。`./tmp` には出力しない。
+
+- Rails/RSpec の規約に従い、ソースのパスを `spec/` 配下にミラーして `_spec.rb` を付ける
+  - `app/models/account.rb` → `spec/models/account_spec.rb`
+  - `app/services/billing/charge.rb` → `spec/services/billing/charge_spec.rb`
+  - `lib/foo/bar.rb` → `spec/lib/foo/bar_spec.rb`（プロジェクトの慣習に合わせる）
+- 既存の spec ファイルがある場合は、それを読み込んで設計したケースを追記・統合する（上書きで既存テストを消さない）
+- アウトラインは本体未実装の `it` 行で構成する。RSpec は本体のない `it` を pending として扱うため、この骨格はそのままコミット・実行しても suite を壊さない
+
+この spec ファイルの骨格を test-implementation スキルが実装に展開する。
 
 ---
 
