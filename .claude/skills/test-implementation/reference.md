@@ -1,7 +1,5 @@
 # RSpec 実装パターン リファレンス
 
-参考: [willnet/rspec-style-guide](https://github.com/willnet/rspec-style-guide)
-
 ---
 
 ## Executable Specification（実行可能な仕様書）
@@ -40,6 +38,28 @@ end
 | Arrange | 前提条件のセットアップ（DBデータ、オブジェクトの状態など） |
 | Act     | テスト対象メソッドの実行 |
 | Assert  | 戻り値・副作用の検証 |
+
+**Act と Assert の間は1行空ける**。「実行」と「検証」の境界が視覚的に分かれ、テストの構造が読み取りやすくなる。
+
+```ruby
+# 良い例: Act と Assert の間に空行
+it '合計金額を返すこと' do
+  order = build(:order, items: items)   # Arrange
+
+  total = order.calculate_total         # Act
+
+  expect(total).to eq 1000              # Assert
+end
+
+# 悪い例: Act と Assert が詰まっていて境界が分かりにくい
+it '合計金額を返すこと' do
+  order = build(:order, items: items)
+  total = order.calculate_total
+  expect(total).to eq 1000
+end
+```
+
+`expect { ... }` の中で実行と検証を一体で書く場合（例外・状態変化の検証）は、Act と Assert が1文に収まるため空行は不要。
 
 ---
 
@@ -185,14 +205,14 @@ it { expect { save_records }.to change { Item.count }.by(10) }
 
 ## FactoryBot のデフォルト値
 
-固定値ではなくランダム値をデフォルトにする。テストは必要な値のみ明示的に指定する。
+最も一般的なケースをデフォルト値にする。テストは必要な値のみ明示的に指定する。
 
 ```ruby
 # 良い例
 FactoryBot.define do
   factory :user do
     sequence(:name) { |i| "test#{i}" }
-    active { [true, false].sample }
+    active { true }
   end
 end
 
