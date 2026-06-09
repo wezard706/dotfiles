@@ -20,6 +20,19 @@
 
       ],
       "deny": []
+    },
+    "hooks": {
+      "PostToolUse": [
+        {
+          "matcher": "Edit|Write|MultiEdit",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/skills/comment-review/hooks/post_tool_use.py\""
+            }
+          ]
+        }
+      ]
     }
   }
   
