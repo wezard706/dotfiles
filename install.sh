@@ -64,6 +64,35 @@ for skill_dir in "$SOURCE_DIR"/skills/*/; do
     fi
 done
 
+# Install hooks and wire them into settings.json so they fire in every project.
+# Hook スクリプトを ~/.claude/hooks/ に配置し、PostToolUse 配線を
+# ~/.claude/settings.json へマージする。他キー・他フックは保全し、
+# 同一コマンドの重複は除くため再実行しても冪等。
+if [ -d "$SOURCE_DIR/hooks" ]; then
+    echo ""
+    echo "🪝 Installing hooks..."
+    HOOKS_DIR="$CLAUDE_DIR/hooks"
+    mkdir -p "$HOOKS_DIR"
+    SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+    [ -f "$SETTINGS_FILE" ] || echo '{}' > "$SETTINGS_FILE"
+    for hook_file in "$SOURCE_DIR"/hooks/*.rb; do
+        [ -f "$hook_file" ] || continue
+        hook_name=$(basename "$hook_file")
+        echo "   Installing hook: $hook_name"
+        cp "$hook_file" "$HOOKS_DIR/$hook_name"
+        chmod +x "$HOOKS_DIR/$hook_name"
+        hook_cmd="ruby \"$HOOKS_DIR/$hook_name\""
+        jq --arg cmd "$hook_cmd" '
+          .hooks //= {} |
+          .hooks.PostToolUse //= [] |
+          .hooks.PostToolUse |= (
+            map(select((.hooks // []) | any(.command == $cmd) | not))
+            + [{"matcher": "Edit|Write|MultiEdit", "hooks": [{"type": "command", "command": $cmd}]}]
+          )
+        ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+    done
+fi
+
 echo ""
 echo "Installation complete!"
 echo ""
