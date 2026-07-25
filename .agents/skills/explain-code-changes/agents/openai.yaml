@@ -1,0 +1,4 @@
+interface:
+  display_name: "Explain Code Changes"
+  short_description: "UXからコードまでを段階的に説明するレビュー画面を生成"
+  default_prompt: "Use $explain-code-changes to create an explanatory review of the current changes."
