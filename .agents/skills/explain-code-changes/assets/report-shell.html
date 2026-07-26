@@ -1,0 +1,911 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>解説付きコードレビュー</title>
+<style>
+  :root {
+    --text: #1f2328;
+    --muted: #59636e;
+    --border: #d1d9e0;
+    --border-soft: #e4e8ed;
+    --surface: #ffffff;
+    --surface-muted: #f6f8fa;
+    --accent: #0969da;
+    --accent-soft: #ddf4ff;
+    --added: #e6ffec;
+    --added-strong: #ccffd8;
+    --removed: #ffebe9;
+    --removed-strong: #ffd7d5;
+    --critical: #cf222e;
+    --warning: #9a6700;
+    --suggestion: #0969da;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.7;
+  }
+
+  button, textarea, select, input { font: inherit; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 40px;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  .toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100vh;
+    overflow: auto;
+    padding: 32px 0;
+  }
+
+  .toc ol { margin: 0; padding: 0; list-style: none; }
+  .toc li { margin: 0 0 2px; }
+
+  .toc a {
+    display: block;
+    padding: 5px 10px;
+    border-left: 2px solid transparent;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.86rem;
+  }
+
+  .toc a:hover { border-left-color: var(--accent); color: var(--accent); }
+
+  .content { min-width: 0; padding: 32px 0 120px; }
+
+  .hero { padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+  .hero h1 { margin: 0 0 12px; font-size: 1.75rem; line-height: 1.35; }
+
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin-bottom: 18px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-family: var(--mono);
+  }
+
+  .chapter { padding: 36px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 16px; }
+  .chapter > h2 { margin: 0 0 18px; font-size: 1.3rem; }
+
+  h3 { margin: 26px 0 10px; font-size: 1.05rem; }
+  h4 { margin: 18px 0 6px; font-size: 0.94rem; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 14px; padding-left: 1.4rem; }
+  li { margin: 0 0 4px; }
+
+  code {
+    padding: 0.15em 0.4em;
+    border-radius: 5px;
+    background: var(--surface-muted);
+    font-family: var(--mono);
+    font-size: 0.86em;
+  }
+
+  /* AIが章本文で使う対比ブロック */
+  .before-after {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 28px;
+    margin: 10px 0 20px;
+  }
+
+  .before-after > div > h4 {
+    margin: 0 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-soft);
+    color: var(--muted);
+  }
+
+  .before-after ul { margin: 0; }
+
+  .unknown { color: var(--warning); }
+
+  .mermaid {
+    margin: 18px 0 22px;
+    padding: 16px 0;
+    border-top: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-soft);
+    text-align: center;
+    overflow-x: auto;
+  }
+
+  .mermaid svg { max-width: 100%; height: auto; }
+
+  details {
+    margin: 14px 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  details > summary {
+    padding: 9px 12px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+
+  details > :not(summary) { padding: 0 12px; }
+  details > pre { margin: 0 12px 12px; }
+
+  pre.code {
+    overflow-x: auto;
+    margin: 10px 0;
+    padding: 12px;
+    border-radius: 6px;
+    background: var(--surface-muted);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  /* 変更意図タブ */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab {
+    flex: 0 0 auto;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    padding: 9px 13px;
+    cursor: pointer;
+    font-size: 0.87rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { border-bottom-color: #fd8c73; color: var(--text); }
+  .tab-panel[hidden] { display: none; }
+  .tab-panel { padding-top: 20px; }
+
+  .group-actions { margin: 4px 0 16px; }
+
+  .link-button {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+
+  .link-button:hover { text-decoration: underline; }
+
+  /* 左右分割diff */
+  .diff {
+    margin: 18px 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .diff-file-header {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .diff-body { overflow-x: auto; }
+
+  .diff-hunk-header {
+    padding: 2px 12px;
+    background: var(--accent-soft);
+    color: var(--muted);
+    min-width: 900px;
+  }
+
+  .diff-row {
+    display: grid;
+    grid-template-columns: minmax(450px, 1fr) minmax(450px, 1fr);
+    min-width: 900px;
+  }
+
+  .diff-cell {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    border-right: 1px solid var(--border-soft);
+    cursor: pointer;
+  }
+
+  .diff-cell:last-child { border-right: 0; }
+  .diff-cell:hover { background: var(--accent-soft); }
+  .diff-cell[data-type="removed"] { background: var(--removed); }
+  .diff-cell[data-type="added"] { background: var(--added); }
+  .diff-cell[data-type="empty"] { background: var(--surface-muted); cursor: default; }
+  .diff-cell[data-type="empty"]:hover { background: var(--surface-muted); }
+
+  .diff-cell .ln {
+    padding: 0 8px;
+    color: var(--muted);
+    text-align: right;
+    user-select: none;
+  }
+
+  .diff-cell .src {
+    padding: 0 8px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .diff-cell[data-type="removed"] .src { background: var(--removed); }
+  .diff-cell[data-type="added"] .src { background: var(--added); }
+
+  .diff-extra {
+    min-width: 900px;
+    border-top: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--surface);
+    padding: 10px 14px;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 0.87rem;
+    line-height: 1.6;
+  }
+
+  .annotation { color: var(--muted); }
+  .annotation strong { color: var(--text); }
+
+  .finding { border-left: 3px solid var(--suggestion); padding-left: 12px; margin: 8px 0; }
+  .finding[data-severity="critical"] { border-left-color: var(--critical); }
+  .finding[data-severity="warning"] { border-left-color: var(--warning); }
+
+  .finding-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+  .finding-head strong { font-size: 0.92rem; }
+
+  .finding-tag {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.74rem;
+  }
+
+  .finding p { margin: 4px 0; }
+  .finding select { margin-top: 6px; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+
+  .group-findings { margin: 0 0 20px; }
+
+  .comment-box { margin: 8px 0; }
+
+  .comment-box textarea {
+    width: 100%;
+    min-height: 72px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    resize: vertical;
+  }
+
+  .comment-box textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+  .comment-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-family: var(--mono);
+  }
+
+  [data-commentable] { position: relative; }
+  [data-commentable]:hover { box-shadow: -8px 0 0 var(--accent-soft); }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+
+  .actions button {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-muted);
+    padding: 7px 14px;
+    cursor: pointer;
+    font-size: 0.87rem;
+    font-weight: 600;
+  }
+
+  .actions button:hover { border-color: var(--accent); color: var(--accent); }
+  .actions button.primary { border-color: #1f883d; background: #1f883d; color: #fff; }
+  .actions button.primary:hover { background: #1a7f37; color: #fff; }
+
+  .status { min-height: 22px; color: #1a7f37; font-size: 0.85rem; }
+
+  #feedback-output {
+    width: 100%;
+    min-height: 260px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    resize: vertical;
+  }
+
+  @media (max-width: 1000px) {
+    .layout { display: block; padding: 0 18px; }
+    .toc { position: static; max-height: none; padding: 20px 0 0; }
+    .toc ol { display: flex; flex-wrap: wrap; gap: 4px; }
+    .toc a { border-left: 0; border-bottom: 2px solid transparent; }
+    .before-after { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="目次"><ol data-toc></ol></nav>
+  <main class="content">
+
+<!-- 共通規約 =================================================================
+     用語: 利用者に見える話は、画面表示・i18n・フォームラベル・ルート名から確認
+           した用語を使う。コード内部の話はクラス名・メソッド名・テーブル名を
+           そのまま使い、翻訳しない。docs/ubiquitous.md があればそれを最優先する
+     証拠: 確認できた事実・推論・不明を区別する。推論には根拠を、不明には何が
+           足りないかを添える
+     図  : 理解を増やす場合だけ描く。どの章でも使ってよい
+           種類は伝えたい内容で選ぶ
+             振る舞い    → flowchart
+             データ構造  → erDiagram
+             責務・依存  → classDiagram
+           同じ内容を複数の章で描かない
+           詳細な呼び出しトレースは描かない。それは差分を読めば分かる
+           1画面で読み切れない図は、分割するか、図をやめて文章にする
+     記述: 各章の本文はHTMLで書く。使える要素と規約は references/authoring-guide.md
+========================================================================== -->
+
+<!-- 変更の要旨 ===============================================================
+     目的: 何も知らないレビュワーが最初に「何の変更か」を掴む足場を作る
+     方針: 2〜3文。実装手段からではなく、解決した問題から書く
+           ここで専門用語を使わない
+     省略: 不可
+========================================================================== -->
+    <header class="hero" data-chapter="summary">
+      <h1 data-report-title></h1>
+      <div class="hero-meta" data-report-meta></div>
+      <div data-slot="summary"></div>
+    </header>
+
+<!-- ユーザー影響 =============================================================
+     目的: 利用者に何が起きるかを、コードの話より先に伝える
+     方針: 影響ごとに変更前・変更後を対比する
+           クラス名やテーブル名はこの章に出さない
+     省略基準: 利用者から見える振る舞いが変わらないと「確認できた」場合のみ
+               確認していないだけの場合は省略せず、不明として書く
+     「確認できた」の判定:
+       画面表示・i18n・ルート・E2Eテスト・機能ドキュメントのいずれも変わって
+       いないことを確かめる
+       これらが対象リポジトリにそもそも存在しない場合、材料が無いことは確認済
+       みを意味しない。公開インターフェースと戻り値が変わらないことを別の根拠
+       で示せたときだけ確認済みとしてよい。示せないなら省略せず不明として書く
+       性能・整合性など間接的な影響は、観測できる差が出る条件を具体的に書ける
+       ときだけこの章へ書く。書けないものは内部品質の指摘として扱う
+========================================================================== -->
+    <section class="chapter" id="user-impact" data-chapter="user-impact">
+      <h2>ユーザー影響</h2>
+      <div data-slot="user-impact"></div>
+    </section>
+
+<!-- 変更の全体像 =============================================================
+     目的: 差分を読む前に、変更全体の地図をレビュワーへ渡す
+     方針: この変更全体で何がどう変わったかだけを書く
+           変更意図ごとの個別の前後説明は書かない（コード解説の章が担当する）
+     図  : 変更全体を1枚で掴ませる図
+     省略基準: 変更意図が1つしかない場合
+               各変更意図の説明を読めば全体が分かる場合
+========================================================================== -->
+    <section class="chapter" id="overview" data-chapter="overview">
+      <h2>変更の全体像</h2>
+      <div data-slot="overview"></div>
+    </section>
+
+<!-- 変更意図ごとのコード解説 ===================================================
+     器と中身の両方を固定する。タブ・左右分割diff・行コメント・品質指摘の配置は
+     ビルダーが code-changes.json から生成する
+     AIが書くのは、各変更意図の説明だけ（1グループ1セクション）
+       - なぜこの変更が必要だったか
+       - 変更前後で何がどう変わったか
+       - 理解に必要な差分外コードがあれば、その抜粋と参照理由
+     図  : その変更意図の内部構造に限った図。全体像の描き直しはしない
+     自明なrenameやimportを逐語的に説明しない
+     省略: 不可
+========================================================================== -->
+    <section class="chapter" id="code-changes" data-chapter="code-changes">
+      <h2>変更意図ごとのコード解説</h2>
+      <div data-slot="code-changes"></div>
+    </section>
+
+<!-- フィードバック ===========================================================
+     完全固定。AIは何も書かない
+========================================================================== -->
+    <section class="chapter" id="feedback" data-chapter="feedback">
+      <h2>フィードバック</h2>
+      <p>採用した指摘とレビュワーのコメントだけを、実装担当者へ渡す形にまとめます。</p>
+      <div class="actions">
+        <button class="primary" type="button" data-action="build-feedback">フィードバックを生成</button>
+        <button type="button" data-action="copy-feedback">クリップボードにコピー</button>
+        <button type="button" data-action="export-state">判定とコメントをJSON保存</button>
+        <button type="button" data-action="import-state">JSONから再開</button>
+        <input type="file" accept="application/json" data-import-file hidden>
+      </div>
+      <p class="status" role="status" data-status></p>
+      <textarea id="feedback-output" aria-label="生成されたフィードバック"></textarea>
+      <div data-code-review></div>
+    </section>
+
+  </main>
+</div>
+
+<div data-mermaid-bundle></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const meta = __REPORT_META__;
+  const storageKey = "explain-code-changes:" + meta.reportId;
+  const lineIndex = new Map(Object.entries(meta.lines || {}));
+  const groupTitles = new Map((meta.groups || []).map((group) => [group.id, group.title]));
+  const findings = meta.findings || [];
+
+  const emptyState = () => ({
+    findingDecisions: {},
+    findingComments: {},
+    groupComments: {},
+    lineComments: {},
+    blockComments: {}
+  });
+
+  const state = (() => {
+    const base = emptyState();
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+      return saved && typeof saved === "object" ? Object.assign(base, saved) : base;
+    } catch {
+      return base;
+    }
+  })();
+
+  const save = () => localStorage.setItem(storageKey, JSON.stringify(state));
+  const filled = (value) => String(value ?? "").trim().length > 0;
+  const setStatus = (message) => {
+    const node = document.querySelector("[data-status]");
+    if (node) node.textContent = message;
+  };
+
+  function element(tag, attributes = {}, text) {
+    const node = document.createElement(tag);
+    for (const [name, value] of Object.entries(attributes)) {
+      if (name === "class") node.className = value;
+      else if (name.startsWith("data-") || name.startsWith("aria-")) node.setAttribute(name, value);
+      else node[name] = value;
+    }
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  /* レビュワーの入力欄。bucket と key で保存先を決め、入力のたびに保存する */
+  function commentBox({ bucket, key, label, placeholder, onClose }) {
+    const box = element("div", { class: "comment-box" });
+    const head = element("div", { class: "comment-head" });
+    head.appendChild(element("span", {}, label));
+    if (onClose) {
+      const close = element("button", { type: "button", class: "link-button" }, "閉じる");
+      close.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onClose();
+      });
+      head.appendChild(close);
+    }
+    const area = element("textarea", {
+      value: state[bucket][key] || "",
+      placeholder: placeholder,
+      "aria-label": label
+    });
+    area.addEventListener("click", (event) => event.stopPropagation());
+    area.addEventListener("input", () => {
+      state[bucket][key] = area.value;
+      save();
+    });
+    box.append(head, area);
+    box.focus = () => area.focus();
+    return box;
+  }
+
+  function buildToc() {
+    const list = document.querySelector("[data-toc]");
+    document.querySelectorAll("[data-chapter]").forEach((chapter) => {
+      const name = chapter.dataset.chapter;
+      const heading = chapter.querySelector("h2") || chapter.querySelector("h1");
+      if (!heading) return;
+      const id = chapter.id || name;
+      chapter.id = id;
+      const item = element("li");
+      item.appendChild(element("a", { href: "#" + id }, heading.textContent));
+      list.appendChild(item);
+    });
+  }
+
+  function wireTabs() {
+    const tabs = Array.from(document.querySelectorAll("[data-tab]"));
+    if (!tabs.length) return;
+    const select = (groupId) => {
+      tabs.forEach((tab) => {
+        const selected = tab.dataset.tab === groupId;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      document.querySelectorAll("[data-tab-panel]").forEach((panel) => {
+        panel.hidden = panel.dataset.tabPanel !== groupId;
+      });
+    };
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => select(tab.dataset.tab));
+      tab.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const step = event.key === "ArrowRight" ? 1 : tabs.length - 1;
+        const next = tabs[(index + step) % tabs.length];
+        select(next.dataset.tab);
+        next.focus();
+      });
+    });
+    select(tabs[0].dataset.tab);
+  }
+
+  /* 差分行のコメント欄は行をクリックしたときだけ開く。
+     既にコメントがある行は、見落とさないよう初期表示で開く。
+     変更のない行は左右どちらのセルにも同じ行が並ぶため、
+     開いた欄を行IDで共有して二重に開かないようにする */
+  function wireDiffLines() {
+    const opened = new Map();
+
+    document.querySelectorAll(".diff-cell[data-line-id]").forEach((cell) => {
+      const lineId = cell.dataset.lineId;
+      const row = cell.closest(".diff-row");
+
+      const close = () => {
+        const holder = opened.get(lineId);
+        if (!holder) return;
+        holder.remove();
+        opened.delete(lineId);
+      };
+
+      const open = () => {
+        if (opened.has(lineId)) {
+          if (!filled(state.lineComments[lineId])) close();
+          return;
+        }
+        const holder = element("div", { class: "diff-extra" });
+        const info = lineIndex.get(lineId) || {};
+        const box = commentBox({
+          bucket: "lineComments",
+          key: lineId,
+          label: (info.file || "") + ":" + (info.number ?? ""),
+          placeholder: "この行へのコメント",
+          onClose: close
+        });
+        holder.appendChild(box);
+        row.after(holder);
+        opened.set(lineId, holder);
+        box.focus();
+      };
+
+      cell.addEventListener("click", open);
+      if (filled(state.lineComments[lineId])) open();
+    });
+  }
+
+  function wireGroupComments() {
+    document.querySelectorAll("[data-group-comment]").forEach((button) => {
+      const groupId = button.dataset.groupComment;
+      const holder = document.querySelector('[data-group-comment-slot="' + CSS.escape(groupId) + '"]');
+      let box = null;
+
+      const close = () => {
+        if (!box) return;
+        box.remove();
+        box = null;
+        button.setAttribute("aria-expanded", "false");
+      };
+
+      const open = () => {
+        if (box) {
+          if (!filled(state.groupComments[groupId])) close();
+          return;
+        }
+        box = commentBox({
+          bucket: "groupComments",
+          key: groupId,
+          label: groupTitles.get(groupId) || groupId,
+          placeholder: "この変更意図へのコメント",
+          onClose: close
+        });
+        holder.appendChild(box);
+        button.setAttribute("aria-expanded", "true");
+        box.focus();
+      };
+
+      button.addEventListener("click", open);
+      if (filled(state.groupComments[groupId])) open();
+    });
+  }
+
+  /* 章本文でAIが data-commentable を付けたブロックにもコメントできるようにする */
+  function wireCommentableBlocks() {
+    document.querySelectorAll("[data-commentable]").forEach((block) => {
+      const key = block.dataset.commentable;
+      let box = null;
+
+      const close = () => {
+        if (!box) return;
+        box.remove();
+        box = null;
+      };
+
+      const open = () => {
+        if (box) {
+          if (!filled(state.blockComments[key])) close();
+          return;
+        }
+        box = commentBox({
+          bucket: "blockComments",
+          key: key,
+          label: "解説へのコメント",
+          placeholder: "この説明へのコメント",
+          onClose: close
+        });
+        block.appendChild(box);
+        box.focus();
+      };
+
+      const trigger = element("button", { type: "button", class: "link-button" }, "コメント");
+      trigger.addEventListener("click", open);
+      block.appendChild(trigger);
+      if (filled(state.blockComments[key])) open();
+    });
+  }
+
+  function wireFindings() {
+    document.querySelectorAll("[data-finding-decision]").forEach((select) => {
+      const id = select.dataset.findingDecision;
+      select.value = state.findingDecisions[id] || "pending";
+      select.addEventListener("change", () => {
+        state.findingDecisions[id] = select.value;
+        save();
+      });
+    });
+    document.querySelectorAll("[data-finding-comment]").forEach((holder) => {
+      const id = holder.dataset.findingComment;
+      const finding = findings.find((item) => item.id === id);
+      let box = null;
+
+      const close = () => {
+        if (!box) return;
+        box.remove();
+        box = null;
+      };
+
+      const open = () => {
+        if (box) {
+          if (!filled(state.findingComments[id])) close();
+          return;
+        }
+        box = commentBox({
+          bucket: "findingComments",
+          key: id,
+          label: finding ? finding.title : id,
+          placeholder: "この指摘へのコメント",
+          onClose: close
+        });
+        holder.appendChild(box);
+        box.focus();
+      };
+
+      const trigger = element("button", { type: "button", class: "link-button" }, "この指摘にコメント");
+      trigger.addEventListener("click", open);
+      holder.appendChild(trigger);
+      if (filled(state.findingComments[id])) open();
+    });
+  }
+
+  function fence(code) {
+    return ["```", String(code ?? ""), "```"];
+  }
+
+  function buildFeedback() {
+    const lines = [
+      "# レビューフィードバック",
+      "",
+      "対象: " + (meta.repository || ""),
+      "比較: " + (meta.baseRef || "") + " → " + (meta.headRef || ""),
+      "生成時点: " + (meta.generatedAt || ""),
+      "",
+      "以下の採用済み指摘とレビュワーコメントを確認し、必要な修正を行ってください。",
+      "対応方針を一意に判断できない場合は、実装前に確認してください。"
+    ];
+
+    const accepted = findings.filter((finding) => state.findingDecisions[finding.id] === "accepted");
+    if (accepted.length) {
+      lines.push("", "## 採用した内部品質の指摘");
+      accepted.forEach((finding, index) => {
+        lines.push(
+          "",
+          "### " + (index + 1) + ". " + finding.title,
+          "",
+          "- 位置: `" + finding.file + ":" + finding.line + "`",
+          "- 重大度: " + finding.severity,
+          "- 観点: " + finding.category,
+          "- 問題: " + finding.detail,
+          "- 修正案: " + finding.suggestion
+        );
+        if (filled(state.findingComments[finding.id])) {
+          lines.push("", "レビュワーコメント: " + state.findingComments[finding.id].trim());
+        }
+      });
+    }
+
+    const groupComments = Object.entries(state.groupComments).filter(([, value]) => filled(value));
+    if (groupComments.length) {
+      lines.push("", "## 変更意図へのコメント");
+      groupComments.forEach(([groupId, comment], index) => {
+        lines.push("", "### " + (index + 1) + ". " + (groupTitles.get(groupId) || groupId), "", comment.trim());
+      });
+    }
+
+    const lineComments = Object.entries(state.lineComments).filter(([, value]) => filled(value));
+    if (lineComments.length) {
+      lines.push("", "## 差分行へのコメント");
+      lineComments.forEach(([lineId, comment], index) => {
+        const info = lineIndex.get(lineId) || {};
+        lines.push(
+          "",
+          "### " + (index + 1) + ". " + (info.file || "位置不明") + ":" + (info.number ?? "?"),
+          "",
+          ...fence(info.content),
+          "",
+          comment.trim()
+        );
+      });
+    }
+
+    const blockComments = Object.entries(state.blockComments).filter(([, value]) => filled(value));
+    if (blockComments.length) {
+      lines.push("", "## 解説へのコメント");
+      blockComments.forEach(([key, comment], index) => {
+        lines.push("", "### " + (index + 1) + ". " + key, "", comment.trim());
+      });
+    }
+
+    lines.push(
+      "",
+      "## 修正後の検証",
+      "",
+      "- 採用した各指摘を再現するテストまたは検証コマンドを実行してください。",
+      "- 変更範囲に対応する既存テスト、静的解析、型検査を実行してください。",
+      "- 実行したコマンドと結果を報告してください。"
+    );
+
+    return lines.join("\n").trim() + "\n";
+  }
+
+  function wireActions() {
+    const output = document.getElementById("feedback-output");
+    const fileInput = document.querySelector("[data-import-file]");
+
+    document.querySelector('[data-action="build-feedback"]').addEventListener("click", () => {
+      output.value = buildFeedback();
+      setStatus("フィードバックを生成しました。");
+    });
+
+    document.querySelector('[data-action="copy-feedback"]').addEventListener("click", async () => {
+      if (!output.value) output.value = buildFeedback();
+      try {
+        await navigator.clipboard.writeText(output.value);
+      } catch {
+        output.select();
+        document.execCommand("copy");
+      }
+      setStatus("クリップボードへコピーしました。");
+    });
+
+    document.querySelector('[data-action="export-state"]').addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify({ reportId: meta.reportId, state }, null, 2)], {
+        type: "application/json"
+      });
+      const url = URL.createObjectURL(blob);
+      const link = element("a", { href: url, download: meta.reportId + "-review-state.json" });
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setStatus("判定とコメントをJSONへ保存しました。");
+    });
+
+    document.querySelector('[data-action="import-state"]').addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      try {
+        const imported = JSON.parse(await file.text());
+        if (imported.reportId !== meta.reportId || !imported.state) {
+          throw new Error("このレポート用のJSONではありません。");
+        }
+        localStorage.setItem(storageKey, JSON.stringify(imported.state));
+        location.reload();
+      } catch (error) {
+        setStatus(error.message);
+      }
+    });
+  }
+
+  function renderHero() {
+    const title = document.querySelector("[data-report-title]");
+    if (title) title.textContent = meta.title || "コード変更レビュー";
+    const info = document.querySelector("[data-report-meta]");
+    if (!info) return;
+    [
+      meta.repository,
+      meta.baseRef && meta.headRef ? meta.baseRef + " → " + meta.headRef : null,
+      meta.changedFiles != null ? meta.changedFiles + " files" : null,
+      meta.additions != null ? "+" + meta.additions + " / -" + meta.deletions : null,
+      meta.generatedAt
+    ].filter(Boolean).forEach((value) => info.appendChild(element("span", {}, value)));
+  }
+
+  function renderDiagrams() {
+    if (typeof mermaid === "undefined") return;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "neutral",
+      securityLevel: "strict",
+      flowchart: { useMaxWidth: true },
+      er: { useMaxWidth: true }
+    });
+    mermaid.run({ querySelector: ".mermaid" }).catch(() => {
+      document.querySelectorAll(".mermaid").forEach((node) => {
+        if (!node.querySelector("svg")) node.classList.add("unknown");
+      });
+    });
+  }
+
+  renderHero();
+  buildToc();
+  wireTabs();
+  wireDiffLines();
+  wireGroupComments();
+  wireCommentableBlocks();
+  wireFindings();
+  wireActions();
+  renderDiagrams();
+})();
+</script>
+</body>
+</html>
