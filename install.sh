@@ -10,12 +10,43 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$SCRIPT_DIR/.claude"
 AGENTS_SOURCE_DIR="$SCRIPT_DIR/.agents"
+EXTERNAL_SKILL_ADAPTERS_DIR="$AGENTS_SOURCE_DIR/external-skill-adapters"
+SKILL_DEPENDENCIES_FILE="${SKILL_DEPENDENCIES_FILE:-$AGENTS_SOURCE_DIR/skill-dependencies.json}"
+EXTERNAL_SKILL_INSTALLER="$SCRIPT_DIR/scripts/install_external_skills.sh"
+SKILL_BUNDLE_ROOT="$(mktemp -d)"
+trap 'rm -rf "$SKILL_BUNDLE_ROOT"' EXIT
+SKILL_BUNDLE_DIR="$SKILL_BUNDLE_ROOT/skills"
 CLAUDE_DIR="$HOME/.claude"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 RULES_DIR="$CLAUDE_DIR/rules"
 GIT_SOURCE_DIR="$SCRIPT_DIR/git"
 CODEX_DIR="$HOME/.codex"
 AGENTS_DIR="$HOME/.agents"
+
+install_managed_skills() {
+    bundle_dir="$1"
+    target_dir="$2"
+    mkdir -p "$target_dir"
+
+    for skill_dir in "$bundle_dir"/*/; do
+        [ -d "$skill_dir" ] || continue
+        skill_name="$(basename "$skill_dir")"
+        incoming_dir="$target_dir/.${skill_name}.incoming.$$"
+        backup_dir="$target_dir/.${skill_name}.backup.$$"
+        rm -rf "$incoming_dir" "$backup_dir"
+        cp -R "$skill_dir" "$incoming_dir"
+        if [ -e "$target_dir/$skill_name" ]; then
+            mv "$target_dir/$skill_name" "$backup_dir"
+        fi
+        if mv "$incoming_dir" "$target_dir/$skill_name"; then
+            rm -rf "$backup_dir"
+        else
+            rm -rf "$incoming_dir"
+            [ ! -e "$backup_dir" ] || mv "$backup_dir" "$target_dir/$skill_name"
+            return 1
+        fi
+    done
+}
 
 echo "Installing dotfiles..."
 echo ""
@@ -59,12 +90,16 @@ done
 # Install skills (正本は .agents/skills)
 echo ""
 echo "📚 Installing skills..."
-for skill_dir in "$AGENTS_SOURCE_DIR"/skills/*/; do
+"$EXTERNAL_SKILL_INSTALLER" \
+    "$SKILL_DEPENDENCIES_FILE" \
+    "$AGENTS_SOURCE_DIR/skills" \
+    "$EXTERNAL_SKILL_ADAPTERS_DIR" \
+    "$SKILL_BUNDLE_DIR"
+install_managed_skills "$SKILL_BUNDLE_DIR" "$SKILLS_DIR"
+for skill_dir in "$SKILLS_DIR"/*/; do
     if [ -d "$skill_dir" ]; then
         skill_name=$(basename "$skill_dir")
-        dest_dir="$SKILLS_DIR/$skill_name"
         echo "   Installing skill: $skill_name"
-        cp -r "$skill_dir" "$dest_dir"
     fi
 done
 
@@ -142,11 +177,11 @@ echo "   Generated AGENTS.md"
 # 上の skills セクションで ~/.claude/skills/ へも配置している。
 # skills CLI 等で導入済みの他スキルを保全するため、スキル単位で上書きコピーする。
 mkdir -p "$AGENTS_DIR/skills"
-for skill_dir in "$AGENTS_SOURCE_DIR"/skills/*/; do
+install_managed_skills "$SKILL_BUNDLE_DIR" "$AGENTS_DIR/skills"
+for skill_dir in "$AGENTS_DIR/skills"/*/; do
     if [ -d "$skill_dir" ]; then
         skill_name=$(basename "$skill_dir")
         echo "   Installing shared skill: $skill_name"
-        cp -r "$skill_dir" "$AGENTS_DIR/skills/$skill_name"
     fi
 done
 

@@ -114,6 +114,53 @@ test_layered_rails_adapter() {
   assert_contains "$adapter" 'references/upstream-review.md'
 }
 
+test_install_sh_replaces_managed_skills_in_both_targets() {
+  case_root="$TEST_ROOT/install-sh"
+  test_home="$case_root/home"
+  mkdir -p "$test_home/.agents/skills/unmanaged" \
+    "$test_home/.claude/skills/unmanaged" \
+    "$test_home/.agents/skills/first" \
+    "$test_home/.claude/skills/first"
+  printf '%s\n' keep > "$test_home/.agents/skills/unmanaged/marker"
+  printf '%s\n' keep > "$test_home/.claude/skills/unmanaged/marker"
+  printf '%s\n' stale > "$test_home/.agents/skills/first/stale"
+  printf '%s\n' stale > "$test_home/.claude/skills/first/stale"
+  write_manifest "$case_root/manifest.json" "$fixture_revision"
+
+  HOME="$test_home" SKILL_DEPENDENCIES_FILE="$case_root/manifest.json" \
+    bash "$ROOT_DIR/install.sh" > "$case_root/install.log"
+
+  assert_file "$test_home/.agents/skills/first/SKILL.md"
+  assert_file "$test_home/.claude/skills/first/SKILL.md"
+  assert_file "$test_home/.agents/skills/layered-rails-review/references/upstream-review.md"
+  assert_file "$test_home/.claude/skills/layered-rails-review/references/upstream-review.md"
+  assert_file "$test_home/.agents/skills/unmanaged/marker"
+  assert_file "$test_home/.claude/skills/unmanaged/marker"
+  assert_not_exists "$test_home/.agents/skills/first/stale"
+  assert_not_exists "$test_home/.claude/skills/first/stale"
+}
+
+test_install_sh_preserves_existing_skills_when_bundle_build_fails() {
+  case_root="$TEST_ROOT/install-sh-failure"
+  test_home="$case_root/home"
+  mkdir -p "$test_home/.agents/skills/first" "$test_home/.claude/skills/first"
+  printf '%s\n' original > "$test_home/.agents/skills/first/original"
+  printf '%s\n' original > "$test_home/.claude/skills/first/original"
+  write_manifest "$case_root/valid.json" "$fixture_revision"
+  jq '.repositories[0].revision = "0000000000000000000000000000000000000000"' \
+    "$case_root/valid.json" > "$case_root/invalid.json"
+
+  if HOME="$test_home" SKILL_DEPENDENCIES_FILE="$case_root/invalid.json" \
+    bash "$ROOT_DIR/install.sh" > "$case_root/stdout.log" 2> "$case_root/stderr.log"; then
+    fail 'expected install.sh to fail when the external skill bundle cannot be built'
+  fi
+
+  assert_file "$test_home/.agents/skills/first/original"
+  assert_file "$test_home/.claude/skills/first/original"
+  assert_not_exists "$test_home/.agents/skills/first/SKILL.md"
+  assert_not_exists "$test_home/.claude/skills/first/SKILL.md"
+}
+
 create_fixture_repository
 test_builds_complete_bundle
 test_rejected_manifest non-commit-revision '.repositories[0].revision = "main"'
@@ -125,4 +172,6 @@ test_rejected_manifest unsafe-destination '.repositories[0].artifacts[0].destina
 test_rejected_manifest duplicate-destination '.repositories[0].artifacts[1].destination = "first"'
 test_repository_manifest
 test_layered_rails_adapter
+test_install_sh_replaces_managed_skills_in_both_targets
+test_install_sh_preserves_existing_skills_when_bundle_build_fails
 echo 'All external skill installer tests passed.'
