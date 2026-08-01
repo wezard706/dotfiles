@@ -114,6 +114,14 @@ test_layered_rails_adapter() {
   assert_contains "$adapter" 'references/upstream-review.md'
 }
 
+test_readme_documents_external_skills() {
+  assert_contains "$ROOT_DIR/README.md" '.agents/skill-dependencies.json'
+  assert_contains "$ROOT_DIR/README.md" 'commit SHA'
+  assert_contains "$ROOT_DIR/README.md" 'composition-patterns'
+  assert_contains "$ROOT_DIR/README.md" 'react-best-practices'
+  assert_contains "$ROOT_DIR/README.md" 'layered-rails-review'
+}
+
 test_install_sh_replaces_managed_skills_in_both_targets() {
   case_root="$TEST_ROOT/install-sh"
   test_home="$case_root/home"
@@ -172,6 +180,7 @@ test_rejected_manifest unsafe-destination '.repositories[0].artifacts[0].destina
 test_rejected_manifest duplicate-destination '.repositories[0].artifacts[1].destination = "first"'
 test_repository_manifest
 test_layered_rails_adapter
+test_readme_documents_external_skills
 test_install_sh_replaces_managed_skills_in_both_targets
 test_install_sh_preserves_existing_skills_when_bundle_build_fails
 echo 'All external skill installer tests passed.'
