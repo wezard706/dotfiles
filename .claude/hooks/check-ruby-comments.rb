@@ -43,7 +43,8 @@ warn <<~MSG
   #{added.map { |c| "    #{c.strip}" }.join("\n")}
 
   ~/.claude/rules/development-principles.md の「コードコメント規約」を Read で参照し、
-  各コメントが「記述してよいコメント」に該当するか検証せよ。
+  各コメントが「設計判断の根拠」「非自明な制約」のいずれかに該当するか検証せよ。
+  判断が付かない場合は comment-review スキルの references/comment-conventions.md（正本）を読め。
   該当しないものは Edit で削除すること。該当するものはそのまま残してよい。
 MSG
 exit 2
