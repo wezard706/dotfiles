@@ -1,0 +1,28 @@
+{
+  "repositories": [
+    {
+      "url": "https://github.com/vercel-labs/agent-skills.git",
+      "revision": "7c180d9044c9ae2b442b567aad4e42a28dd5ed62",
+      "artifacts": [
+        {
+          "source": "skills/composition-patterns",
+          "destination": "composition-patterns"
+        },
+        {
+          "source": "skills/react-best-practices",
+          "destination": "react-best-practices"
+        }
+      ]
+    },
+    {
+      "url": "https://github.com/jasim/layered-rails-skills.git",
+      "revision": "1328ef71675315a658fdbd494db4b2fd488c0ec8",
+      "artifacts": [
+        {
+          "source": "layered-rails/commands/review.md",
+          "destination": "layered-rails-review/references/upstream-review.md"
+        }
+      ]
+    }
+  ]
+}

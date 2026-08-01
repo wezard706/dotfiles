@@ -92,6 +92,28 @@ test_rejected_manifest() {
   assert_not_exists "$case_root/output/first"
 }
 
+test_repository_manifest() {
+  manifest="$ROOT_DIR/.agents/skill-dependencies.json"
+  jq -e '
+    [.repositories[].revision] == [
+      "7c180d9044c9ae2b442b567aad4e42a28dd5ed62",
+      "1328ef71675315a658fdbd494db4b2fd488c0ec8"
+    ] and
+    [.repositories[].artifacts[].destination] == [
+      "composition-patterns",
+      "react-best-practices",
+      "layered-rails-review/references/upstream-review.md"
+    ]
+  ' "$manifest" >/dev/null || fail 'unexpected external skill manifest'
+}
+
+test_layered_rails_adapter() {
+  adapter="$ROOT_DIR/.agents/external-skill-adapters/layered-rails-review/SKILL.md"
+  assert_file "$adapter"
+  assert_contains "$adapter" 'name: layered-rails-review'
+  assert_contains "$adapter" 'references/upstream-review.md'
+}
+
 create_fixture_repository
 test_builds_complete_bundle
 test_rejected_manifest non-commit-revision '.repositories[0].revision = "main"'
@@ -101,4 +123,6 @@ test_rejected_manifest unsafe-source '.repositories[0].artifacts[0].source = "..
 test_rejected_manifest absolute-destination '.repositories[0].artifacts[0].destination = "/absolute"'
 test_rejected_manifest unsafe-destination '.repositories[0].artifacts[0].destination = "../outside"'
 test_rejected_manifest duplicate-destination '.repositories[0].artifacts[1].destination = "first"'
+test_repository_manifest
+test_layered_rails_adapter
 echo 'All external skill installer tests passed.'
