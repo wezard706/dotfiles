@@ -35,11 +35,28 @@ copy_skill_directories() {
   cp -R "$source_dir"/. "$BUNDLE_DIR"
 }
 
-reject_symlinks() {
+reject_symlink_path_components() {
+  checked_path="$1"
+  path_label="$2"
+  case "$checked_path" in
+    /*) ;;
+    *) checked_path="$(pwd)/$checked_path" ;;
+  esac
+
+  while :; do
+    [ ! -L "$checked_path" ] || die "symbolic link path component in $path_label: $checked_path"
+    parent_path="$(dirname "$checked_path")"
+    [ "$parent_path" != "$checked_path" ] || break
+    checked_path="$parent_path"
+  done
+}
+
+reject_symlink_tree() {
   source_path="$1"
-  [ ! -L "$source_path" ] || die "symbolic link artifact source: $2"
-  if find "$source_path" -type l -print -quit | grep -q .; then
-    die "symbolic link within artifact source: $2"
+  path_label="$2"
+  reject_symlink_path_components "$source_path" "$path_label"
+  if [ -e "$source_path" ] && find "$source_path" -type l -print -quit | grep -q .; then
+    die "symbolic link within $path_label: $source_path"
   fi
 }
 
@@ -63,11 +80,15 @@ duplicate_destination="$(jq -r '[.repositories[].artifacts[].destination] | grou
 
 [ -d "$LOCAL_SKILLS_DIR" ] || die "local skills directory not found: $LOCAL_SKILLS_DIR"
 [ -d "$ADAPTERS_DIR" ] || die "adapters directory not found: $ADAPTERS_DIR"
+reject_symlink_tree "$LOCAL_SKILLS_DIR" 'local skills'
+reject_symlink_tree "$ADAPTERS_DIR" 'local adapters'
+reject_symlink_path_components "$OUTPUT_DIR" 'bundle destination'
 
 OUTPUT_PARENT="$(dirname "$OUTPUT_DIR")"
 [ -d "$OUTPUT_PARENT" ] || die "output parent directory not found: $OUTPUT_PARENT"
 
 WORK_DIR="$(mktemp -d)"
+WORK_DIR="$(cd "$WORK_DIR" && pwd -P)"
 trap cleanup EXIT
 BUNDLE_DIR="$WORK_DIR/bundle"
 mkdir "$BUNDLE_DIR"
@@ -96,9 +117,10 @@ jq -c '.repositories[]' "$MANIFEST" | while IFS= read -r repository; do
 
     source_path="$repository_dir/$source"
     destination_path="$BUNDLE_DIR/$destination"
+    reject_symlink_tree "$source_path" "artifact source $source"
+    reject_symlink_path_components "$destination_path" "artifact destination $destination"
     [ -e "$source_path" ] || die "artifact source not found: $source"
     [ ! -e "$destination_path" ] || die "artifact destination already exists: $destination"
-    reject_symlinks "$source_path" "$source"
 
     if [ -d "$source_path" ]; then
       [ -f "$source_path/SKILL.md" ] || die "artifact skill is missing SKILL.md: $source"
@@ -123,6 +145,8 @@ fi
 
 incoming_dir="$OUTPUT_PARENT/.skill-bundle.incoming.$$"
 backup_dir="$OUTPUT_PARENT/.skill-bundle.backup.$$"
+reject_symlink_path_components "$incoming_dir" 'incoming bundle destination'
+reject_symlink_path_components "$backup_dir" 'backup bundle destination'
 rm -rf "$incoming_dir" "$backup_dir"
 mv "$BUNDLE_DIR" "$incoming_dir"
 if [ -e "$OUTPUT_DIR" ]; then

@@ -14,8 +14,11 @@ EXTERNAL_SKILL_ADAPTERS_DIR="$AGENTS_SOURCE_DIR/external-skill-adapters"
 SKILL_DEPENDENCIES_FILE="${SKILL_DEPENDENCIES_FILE:-$AGENTS_SOURCE_DIR/skill-dependencies.json}"
 EXTERNAL_SKILL_INSTALLER="$SCRIPT_DIR/scripts/install_external_skills.sh"
 SKILL_BUNDLE_ROOT="$(mktemp -d)"
+SKILL_BUNDLE_ROOT="$(cd "$SKILL_BUNDLE_ROOT" && pwd -P)"
 trap 'rm -rf "$SKILL_BUNDLE_ROOT"' EXIT
 SKILL_BUNDLE_DIR="$SKILL_BUNDLE_ROOT/skills"
+MANAGED_SKILLS_INVENTORY_FILE=".dotfiles-managed-skills"
+SKILL_TRANSACTION_DIR_NAME=".dotfiles-managed-skills.transaction.$$"
 CLAUDE_DIR="$HOME/.claude"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 RULES_DIR="$CLAUDE_DIR/rules"
@@ -23,30 +26,268 @@ GIT_SOURCE_DIR="$SCRIPT_DIR/git"
 CODEX_DIR="$HOME/.codex"
 AGENTS_DIR="$HOME/.agents"
 
-install_managed_skills() {
-    bundle_dir="$1"
-    target_dir="$2"
-    mkdir -p "$target_dir"
+skill_install_error() {
+    echo "❌ Managed skill installation failed: $*" >&2
+    return 1
+}
 
-    for skill_dir in "$bundle_dir"/*/; do
-        [ -d "$skill_dir" ] || continue
-        skill_name="$(basename "$skill_dir")"
-        incoming_dir="$target_dir/.${skill_name}.incoming.$$"
-        backup_dir="$target_dir/.${skill_name}.backup.$$"
-        rm -rf "$incoming_dir" "$backup_dir"
-        cp -R "$skill_dir" "$incoming_dir"
-        if [ -e "$target_dir/$skill_name" ]; then
-            mv "$target_dir/$skill_name" "$backup_dir"
-        fi
-        if mv "$incoming_dir" "$target_dir/$skill_name"; then
-            rm -rf "$backup_dir"
-        else
-            rm -rf "$incoming_dir"
-            [ ! -e "$backup_dir" ] || mv "$backup_dir" "$target_dir/$skill_name"
+reject_symlink_path_components() {
+    checked_path="$1"
+    path_label="$2"
+    case "$checked_path" in
+        /*) ;;
+        *) checked_path="$(pwd)/$checked_path" ;;
+    esac
+
+    while :; do
+        [ ! -L "$checked_path" ] || {
+            skill_install_error "symbolic link path component in $path_label: $checked_path"
             return 1
-        fi
+        }
+        parent_path="$(dirname "$checked_path")"
+        [ "$parent_path" != "$checked_path" ] || break
+        checked_path="$parent_path"
     done
 }
+
+reject_symlink_tree() {
+    source_path="$1"
+    path_label="$2"
+    reject_symlink_path_components "$source_path" "$path_label" || return 1
+    if [ -e "$source_path" ] && find "$source_path" -type l -print -quit | grep -q .; then
+        skill_install_error "symbolic link within $path_label: $source_path"
+        return 1
+    fi
+}
+
+validate_managed_skill_name() {
+    skill_name="$1"
+    [ -n "$skill_name" ] || return 1
+    case "$skill_name" in
+        .|..|*/*|*$'\n'*|*$'\r'*|"$MANAGED_SKILLS_INVENTORY_FILE"|.dotfiles-managed-skills.transaction.*) return 1 ;;
+    esac
+}
+
+build_managed_skills_inventory() {
+    bundle_dir="$1"
+    inventory_path="$2"
+    unsorted_inventory="$inventory_path.unsorted"
+    : > "$unsorted_inventory" || return 1
+
+    reject_symlink_tree "$bundle_dir" 'skill bundle' || return 1
+    for skill_dir in "$bundle_dir"/* "$bundle_dir"/.[!.]* "$bundle_dir"/..?*; do
+        [ -d "$skill_dir" ] || continue
+        skill_name="$(basename "$skill_dir")"
+        validate_managed_skill_name "$skill_name" || {
+            skill_install_error "invalid managed skill name: $skill_name"
+            return 1
+        }
+        [ -f "$skill_dir/SKILL.md" ] || {
+            skill_install_error "bundle skill is missing SKILL.md: $skill_name"
+            return 1
+        }
+        printf '%s\n' "$skill_name" >> "$unsorted_inventory" || return 1
+    done
+
+    LC_ALL=C sort -u "$unsorted_inventory" > "$inventory_path" || return 1
+    rm -f "$unsorted_inventory" || return 1
+}
+
+validate_managed_skills_inventory() {
+    inventory_path="$1"
+    while IFS= read -r skill_name || [ -n "$skill_name" ]; do
+        validate_managed_skill_name "$skill_name" || {
+            skill_install_error "invalid skill name in inventory $inventory_path: $skill_name"
+            return 1
+        }
+    done < "$inventory_path"
+}
+
+inventory_contains_skill() {
+    skill_name="$1"
+    inventory_path="$2"
+    grep -Fqx -- "$skill_name" "$inventory_path"
+}
+
+prepare_skill_target() {
+    bundle_dir="$1"
+    target_dir="$2"
+    current_inventory="$3"
+    transaction_dir="$target_dir/$SKILL_TRANSACTION_DIR_NAME"
+    inventory_path="$target_dir/$MANAGED_SKILLS_INVENTORY_FILE"
+    SKILL_TRANSACTION_CREATED=0
+
+    reject_symlink_path_components "$target_dir" 'skill installation target' || return 1
+    mkdir -p "$target_dir" || return 1
+    reject_symlink_path_components "$target_dir" 'skill installation target' || return 1
+    [ ! -e "$transaction_dir" ] && [ ! -L "$transaction_dir" ] || {
+        skill_install_error "skill transaction path already exists: $transaction_dir"
+        return 1
+    }
+    mkdir -p "$transaction_dir/incoming" "$transaction_dir/backups" || return 1
+    SKILL_TRANSACTION_CREATED=1
+    cp "$current_inventory" "$transaction_dir/current" || return 1
+
+    reject_symlink_path_components "$inventory_path" 'managed skills inventory' || return 1
+    if [ -e "$inventory_path" ]; then
+        [ -f "$inventory_path" ] || {
+            skill_install_error "managed skills inventory is not a file: $inventory_path"
+            return 1
+        }
+        cp "$inventory_path" "$transaction_dir/previous" || return 1
+        cp "$inventory_path" "$transaction_dir/inventory.backup" || return 1
+    else
+        : > "$transaction_dir/previous" || return 1
+    fi
+    validate_managed_skills_inventory "$transaction_dir/previous" || return 1
+
+    LC_ALL=C sort -u "$transaction_dir/current" "$transaction_dir/previous" \
+        > "$transaction_dir/affected" || return 1
+
+    while IFS= read -r skill_name || [ -n "$skill_name" ]; do
+        target_path="$target_dir/$skill_name"
+        backup_path="$transaction_dir/backups/$skill_name"
+        reject_symlink_path_components "$target_path" 'managed skill destination' || return 1
+        if [ -e "$target_path" ]; then
+            cp -R "$target_path" "$backup_path" || return 1
+        fi
+    done < "$transaction_dir/affected"
+
+    while IFS= read -r skill_name || [ -n "$skill_name" ]; do
+        source_path="$bundle_dir/$skill_name"
+        incoming_path="$transaction_dir/incoming/$skill_name"
+        reject_symlink_tree "$source_path" 'managed skill source' || return 1
+        reject_symlink_path_components "$incoming_path" 'managed skill incoming destination' || return 1
+        cp -R "$source_path" "$incoming_path" || return 1
+    done < "$transaction_dir/current"
+
+    cp "$current_inventory" "$transaction_dir/inventory.incoming" || return 1
+}
+
+apply_skill_target() {
+    target_dir="$1"
+    transaction_dir="$target_dir/$SKILL_TRANSACTION_DIR_NAME"
+
+    while IFS= read -r skill_name || [ -n "$skill_name" ]; do
+        target_path="$target_dir/$skill_name"
+        reject_symlink_path_components "$target_path" 'managed skill destination' || return 1
+        rm -rf "$target_path" || return 1
+        mv "$transaction_dir/incoming/$skill_name" "$target_path" || return 1
+    done < "$transaction_dir/current"
+
+    while IFS= read -r skill_name || [ -n "$skill_name" ]; do
+        if ! inventory_contains_skill "$skill_name" "$transaction_dir/current"; then
+            target_path="$target_dir/$skill_name"
+            reject_symlink_path_components "$target_path" 'stale managed skill destination' || return 1
+            rm -rf "$target_path" || return 1
+        fi
+    done < "$transaction_dir/previous"
+
+    inventory_path="$target_dir/$MANAGED_SKILLS_INVENTORY_FILE"
+    reject_symlink_path_components "$inventory_path" 'managed skills inventory' || return 1
+    rm -f "$inventory_path" || return 1
+    mv "$transaction_dir/inventory.incoming" "$inventory_path" || return 1
+}
+
+rollback_skill_target() {
+    target_dir="$1"
+    transaction_dir="$target_dir/$SKILL_TRANSACTION_DIR_NAME"
+    rollback_status=0
+
+    while IFS= read -r skill_name || [ -n "$skill_name" ]; do
+        target_path="$target_dir/$skill_name"
+        backup_path="$transaction_dir/backups/$skill_name"
+        if ! reject_symlink_path_components "$target_path" 'managed skill rollback destination'; then
+            rollback_status=1
+            continue
+        fi
+        rm -rf "$target_path" || {
+            rollback_status=1
+            continue
+        }
+        if [ -e "$backup_path" ] && ! mv "$backup_path" "$target_path"; then
+            rollback_status=1
+        fi
+    done < "$transaction_dir/affected"
+
+    inventory_path="$target_dir/$MANAGED_SKILLS_INVENTORY_FILE"
+    if reject_symlink_path_components "$inventory_path" 'managed skills inventory rollback destination'; then
+        rm -f "$inventory_path" || rollback_status=1
+        if [ -e "$transaction_dir/inventory.backup" ] && \
+            ! mv "$transaction_dir/inventory.backup" "$inventory_path"; then
+            rollback_status=1
+        fi
+    else
+        rollback_status=1
+    fi
+
+    [ "$rollback_status" -eq 0 ]
+}
+
+cleanup_skill_transaction() {
+    target_dir="$1"
+    transaction_dir="$target_dir/$SKILL_TRANSACTION_DIR_NAME"
+    [ ! -e "$transaction_dir" ] || rm -rf "$transaction_dir"
+}
+
+install_managed_skills_transaction() {
+    bundle_dir="$1"
+    first_target_dir="$2"
+    second_target_dir="$3"
+    current_inventory="$SKILL_BUNDLE_ROOT/managed-skills"
+    first_apply_started=0
+    second_apply_started=0
+    rollback_status=0
+    first_transaction_prepared=0
+
+    build_managed_skills_inventory "$bundle_dir" "$current_inventory" || return 1
+    validate_managed_skills_inventory "$current_inventory" || return 1
+
+    if ! prepare_skill_target "$bundle_dir" "$first_target_dir" "$current_inventory"; then
+        if [ "$SKILL_TRANSACTION_CREATED" -eq 1 ]; then
+            cleanup_skill_transaction "$first_target_dir"
+        fi
+        return 1
+    fi
+    first_transaction_prepared=1
+    if ! prepare_skill_target "$bundle_dir" "$second_target_dir" "$current_inventory"; then
+        if [ "$SKILL_TRANSACTION_CREATED" -eq 1 ]; then
+            cleanup_skill_transaction "$second_target_dir"
+        fi
+        if [ "$first_transaction_prepared" -eq 1 ]; then
+            cleanup_skill_transaction "$first_target_dir"
+        fi
+        return 1
+    fi
+    first_apply_started=1
+    if apply_skill_target "$first_target_dir"; then
+        second_apply_started=1
+        if apply_skill_target "$second_target_dir"; then
+            cleanup_skill_transaction "$second_target_dir"
+            cleanup_skill_transaction "$first_target_dir"
+            return 0
+        fi
+    fi
+
+    skill_install_error 'could not apply both skill installation targets; restoring previous state' || true
+    if [ "$second_apply_started" -eq 1 ] && ! rollback_skill_target "$second_target_dir"; then
+        rollback_status=1
+    fi
+    if [ "$first_apply_started" -eq 1 ] && ! rollback_skill_target "$first_target_dir"; then
+        rollback_status=1
+    fi
+
+    if [ "$rollback_status" -eq 0 ]; then
+        cleanup_skill_transaction "$second_target_dir"
+        cleanup_skill_transaction "$first_target_dir"
+    else
+        skill_install_error 'rollback failed; transaction backups were preserved' || true
+    fi
+    return 1
+}
+
+reject_symlink_path_components "$SKILLS_DIR" 'Claude Code skill installation target'
+reject_symlink_path_components "$AGENTS_DIR/skills" 'Codex skill installation target'
 
 echo "Installing dotfiles..."
 echo ""
@@ -95,7 +336,7 @@ echo "📚 Installing skills..."
     "$AGENTS_SOURCE_DIR/skills" \
     "$EXTERNAL_SKILL_ADAPTERS_DIR" \
     "$SKILL_BUNDLE_DIR"
-install_managed_skills "$SKILL_BUNDLE_DIR" "$SKILLS_DIR"
+install_managed_skills_transaction "$SKILL_BUNDLE_DIR" "$SKILLS_DIR" "$AGENTS_DIR/skills"
 for skill_dir in "$SKILLS_DIR"/*/; do
     if [ -d "$skill_dir" ]; then
         skill_name=$(basename "$skill_dir")
@@ -172,12 +413,6 @@ mkdir -p "$CODEX_DIR"
 } > "$CODEX_DIR/AGENTS.md"
 echo "   Generated AGENTS.md"
 
-# 共有スキルを ~/.agents/skills/ へ配置する。Codex はこのディレクトリを
-# スキル探索パスとして読むが Claude Code は読まないため、Claude 向けには
-# 上の skills セクションで ~/.claude/skills/ へも配置している。
-# skills CLI 等で導入済みの他スキルを保全するため、スキル単位で上書きコピーする。
-mkdir -p "$AGENTS_DIR/skills"
-install_managed_skills "$SKILL_BUNDLE_DIR" "$AGENTS_DIR/skills"
 for skill_dir in "$AGENTS_DIR/skills"/*/; do
     if [ -d "$skill_dir" ]; then
         skill_name=$(basename "$skill_dir")
