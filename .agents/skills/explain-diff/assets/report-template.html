@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>解説付きコードレビュー</title>
+<title>変更差分の解説</title>
 <style>
   :root {
     --text: #1f2328;
@@ -19,9 +19,7 @@
     --added-strong: #ccffd8;
     --removed: #ffebe9;
     --removed-strong: #ffd7d5;
-    --critical: #cf222e;
     --warning: #9a6700;
-    --suggestion: #0969da;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   }
 
@@ -276,24 +274,6 @@
   .annotation { color: var(--muted); }
   .annotation strong { color: var(--text); }
 
-  .finding { border-left: 3px solid var(--suggestion); padding-left: 12px; margin: 8px 0; }
-  .finding[data-severity="critical"] { border-left-color: var(--critical); }
-  .finding[data-severity="warning"] { border-left-color: var(--warning); }
-
-  .finding-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
-  .finding-head strong { font-size: 0.92rem; }
-
-  .finding-tag {
-    color: var(--muted);
-    font-family: var(--mono);
-    font-size: 0.74rem;
-  }
-
-  .finding p { margin: 4px 0; }
-  .finding select { margin-top: 6px; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
-
-  .group-findings { margin: 0 0 20px; }
-
   .comment-box { margin: 8px 0; }
 
   .comment-box textarea {
@@ -369,15 +349,22 @@
            そのまま使い、翻訳しない。docs/ubiquitous.md があればそれを最優先する
      証拠: 確認できた事実・推論・不明を区別する。推論には根拠を、不明には何が
            足りないかを添える
-     図  : 理解を増やす場合だけ描く。どの章でも使ってよい
-           種類は伝えたい内容で選ぶ
-             振る舞い    → flowchart
-             データ構造  → erDiagram
-             責務・依存  → classDiagram
-           同じ内容を複数の章で描かない
-           詳細な呼び出しトレースは描かない。それは差分を読めば分かる
-           1画面で読み切れない図は、分割するか、図をやめて文章にする
+     図  : 何を描くかは各章のコメントが定める。全体像とコード解説は図が必須で、
+           種類も指定されている。それ以外の章では、理解を増やす場合だけ描く
+           業務フロー図はシーケンス図（sequenceDiagram）で描く。作り方は
+           sequence-diagram スキルの規則に従う（references/analysis-guide.md）
+           業務フロー図は必ずE2E（利用者の起点から終点まで通し）で描く。起点の
+           participant は常に利用者で、エントリポイントのクラスから始めない。
+           途中の一区間だけを切り出すと、レビュワーはその図が全体のどこの話な
+           のか分からなくなる。区間を絞るのではなく、関係の薄い区間を1メッセー
+           ジへまとめて圧縮することで小さくする
+           抽象度は章ごとに変える。同じ抽象度の同じ図を複数の章で描かない
+           指定の図だけでは伝わらない軸があるときに限り、補助の図を足してよい
+             状態・ステータスの遷移 → stateDiagram-v2
+             責務・依存の配置       → classDiagram
+             層・コンポーネント構成 → block-beta
      記述: 各章の本文はHTMLで書く。使える要素と規約は references/authoring-guide.md
+           図の記法・変更前後の並べ方・強調・種類ごとの落とし穴も同ファイル
 ========================================================================== -->
 
 <!-- 変更の要旨 ===============================================================
@@ -405,7 +392,8 @@
        みを意味しない。公開インターフェースと戻り値が変わらないことを別の根拠
        で示せたときだけ確認済みとしてよい。示せないなら省略せず不明として書く
        性能・整合性など間接的な影響は、観測できる差が出る条件を具体的に書ける
-       ときだけこの章へ書く。書けないものは内部品質の指摘として扱う
+       ときだけこの章へ書く。書けないなら利用者が違いを観測できる保証が無い
+       ということなので、この章には書かない
 ========================================================================== -->
     <section class="chapter" id="user-impact" data-chapter="user-impact">
       <h2>ユーザー影響</h2>
@@ -414,11 +402,25 @@
 
 <!-- 変更の全体像 =============================================================
      目的: 差分を読む前に、変更全体の地図をレビュワーへ渡す
+           レビュワーはこの章を読んでから各変更意図のタブへ降りる。ここで
+           全体の形が掴めていないと、タブを1つ読むたびに迷子になる
      方針: この変更全体で何がどう変わったかだけを書く
            変更意図ごとの個別の前後説明は書かない（コード解説の章が担当する）
-     図  : 変更全体を1枚で掴ませる図
-     省略基準: 変更意図が1つしかない場合
-               各変更意図の説明を読めば全体が分かる場合
+     図1 : 概要レベルの業務フロー図（シーケンス図）を必ず描く
+           抽象度は sequence-diagram スキルの「概念レベル」。participant は
+           利用者・APIサーバー・データベース等の役割名にし、クラス名・メソッド
+           名・条件分岐はこの図に出さない。それらは変更意図ごとの詳細図が担う
+           E2Eで、変更前と変更後の2枚を並べる。業務フローが変わらない変更なら
+           変更後の1枚だけでよい（変わらないことを本文に書く）
+           この図は各変更意図の詳細図が参照する地図になるので、詳細図で展開
+           するやり取りが、この図のどのメッセージに当たるか分かる言葉を選ぶ
+     図2 : DBスキーマに変更がある場合のみ、変更前と変更後のER図を並べる
+           判定材料は db/migrate・schema.rb・structure.sql 等の差分の有無
+           この変更に関係するテーブルとカラムだけを書く。関係しないカラムまで
+           並べると、どこが変わったのかが埋もれる
+     省略基準: 利用者の操作から結果までの業務フローが存在しない変更のみ
+               （CI設定・依存更新・ドキュメントのみの変更など）
+               変更意図が1つしかない場合でも、E2Eの地図は残す
 ========================================================================== -->
     <section class="chapter" id="overview" data-chapter="overview">
       <h2>変更の全体像</h2>
@@ -426,13 +428,23 @@
     </section>
 
 <!-- 変更意図ごとのコード解説 ===================================================
-     器と中身の両方を固定する。タブ・左右分割diff・行コメント・品質指摘の配置は
+     枠組みと中身の両方を固定する。タブ・左右分割diff・行コメントの配置は
      ビルダーが code-changes.json から生成する
      AIが書くのは、各変更意図の説明だけ（1グループ1セクション）
        - なぜこの変更が必要だったか
        - 変更前後で何がどう変わったか
        - 理解に必要な差分外コードがあれば、その抜粋と参照理由
-     図  : その変更意図の内部構造に限った図。全体像の描き直しはしない
+     図  : 詳細レベルの業務フロー図（シーケンス図）を必ず描く
+           抽象度は sequence-diagram スキルの「クラス単位」。この変更意図が
+           触れる範囲の participant はクラス名にし、メソッドの往復を展開する
+           全体像と同じくE2Eで描く。ただし展開するのはこの変更意図が触れる
+           区間だけで、関係しない区間は利用者からの1メッセージへまとめて通す
+           E2Eを保つのは、レビュワーがこの図だけで「全体像のどこの話か」を
+           掴めるようにするため。触れる区間だけを切り出すと、タブを開くたびに
+           全体との接続を自力で組み直すことになる
+           変更前後でこの区間のやり取りが変わるなら2枚、変わらないなら1枚
+           全体像の図をそのまま描き直さない。全体像は概念レベル、ここはクラス
+           単位で、圧縮する区間も違う
      自明なrenameやimportを逐語的に説明しない
      省略: 不可
 ========================================================================== -->
@@ -446,17 +458,16 @@
 ========================================================================== -->
     <section class="chapter" id="feedback" data-chapter="feedback">
       <h2>フィードバック</h2>
-      <p>採用した指摘とレビュワーのコメントだけを、実装担当者へ渡す形にまとめます。</p>
+      <p>レビュワーが残したコメントを、実装担当者へ渡す形にまとめます。</p>
       <div class="actions">
         <button class="primary" type="button" data-action="build-feedback">フィードバックを生成</button>
         <button type="button" data-action="copy-feedback">クリップボードにコピー</button>
-        <button type="button" data-action="export-state">判定とコメントをJSON保存</button>
+        <button type="button" data-action="export-state">コメントをJSON保存</button>
         <button type="button" data-action="import-state">JSONから再開</button>
         <input type="file" accept="application/json" data-import-file hidden>
       </div>
       <p class="status" role="status" data-status></p>
       <textarea id="feedback-output" aria-label="生成されたフィードバック"></textarea>
-      <div data-code-review></div>
     </section>
 
   </main>
@@ -469,14 +480,11 @@
   "use strict";
 
   const meta = __REPORT_META__;
-  const storageKey = "explain-code-changes:" + meta.reportId;
+  const storageKey = "explain-diff:" + meta.reportId;
   const lineIndex = new Map(Object.entries(meta.lines || {}));
   const groupTitles = new Map((meta.groups || []).map((group) => [group.id, group.title]));
-  const findings = meta.findings || [];
 
   const emptyState = () => ({
-    findingDecisions: {},
-    findingComments: {},
     groupComments: {},
     lineComments: {},
     blockComments: {}
@@ -692,49 +700,6 @@
     });
   }
 
-  function wireFindings() {
-    document.querySelectorAll("[data-finding-decision]").forEach((select) => {
-      const id = select.dataset.findingDecision;
-      select.value = state.findingDecisions[id] || "pending";
-      select.addEventListener("change", () => {
-        state.findingDecisions[id] = select.value;
-        save();
-      });
-    });
-    document.querySelectorAll("[data-finding-comment]").forEach((holder) => {
-      const id = holder.dataset.findingComment;
-      const finding = findings.find((item) => item.id === id);
-      let box = null;
-
-      const close = () => {
-        if (!box) return;
-        box.remove();
-        box = null;
-      };
-
-      const open = () => {
-        if (box) {
-          if (!filled(state.findingComments[id])) close();
-          return;
-        }
-        box = commentBox({
-          bucket: "findingComments",
-          key: id,
-          label: finding ? finding.title : id,
-          placeholder: "この指摘へのコメント",
-          onClose: close
-        });
-        holder.appendChild(box);
-        box.focus();
-      };
-
-      const trigger = element("button", { type: "button", class: "link-button" }, "この指摘にコメント");
-      trigger.addEventListener("click", open);
-      holder.appendChild(trigger);
-      if (filled(state.findingComments[id])) open();
-    });
-  }
-
   function fence(code) {
     return ["```", String(code ?? ""), "```"];
   }
@@ -747,29 +712,9 @@
       "比較: " + (meta.baseRef || "") + " → " + (meta.headRef || ""),
       "生成時点: " + (meta.generatedAt || ""),
       "",
-      "以下の採用済み指摘とレビュワーコメントを確認し、必要な修正を行ってください。",
+      "以下のレビュワーコメントを確認し、必要な修正を行ってください。",
       "対応方針を一意に判断できない場合は、実装前に確認してください。"
     ];
-
-    const accepted = findings.filter((finding) => state.findingDecisions[finding.id] === "accepted");
-    if (accepted.length) {
-      lines.push("", "## 採用した内部品質の指摘");
-      accepted.forEach((finding, index) => {
-        lines.push(
-          "",
-          "### " + (index + 1) + ". " + finding.title,
-          "",
-          "- 位置: `" + finding.file + ":" + finding.line + "`",
-          "- 重大度: " + finding.severity,
-          "- 観点: " + finding.category,
-          "- 問題: " + finding.detail,
-          "- 修正案: " + finding.suggestion
-        );
-        if (filled(state.findingComments[finding.id])) {
-          lines.push("", "レビュワーコメント: " + state.findingComments[finding.id].trim());
-        }
-      });
-    }
 
     const groupComments = Object.entries(state.groupComments).filter(([, value]) => filled(value));
     if (groupComments.length) {
@@ -807,7 +752,7 @@
       "",
       "## 修正後の検証",
       "",
-      "- 採用した各指摘を再現するテストまたは検証コマンドを実行してください。",
+      "- 対応した各コメントを再現するテストまたは検証コマンドを実行してください。",
       "- 変更範囲に対応する既存テスト、静的解析、型検査を実行してください。",
       "- 実行したコマンドと結果を報告してください。"
     );
@@ -845,7 +790,7 @@
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      setStatus("判定とコメントをJSONへ保存しました。");
+      setStatus("コメントをJSONへ保存しました。");
     });
 
     document.querySelector('[data-action="import-state"]').addEventListener("click", () => fileInput.click());
@@ -902,7 +847,6 @@
   wireDiffLines();
   wireGroupComments();
   wireCommentableBlocks();
-  wireFindings();
   wireActions();
   renderDiagrams();
 })();

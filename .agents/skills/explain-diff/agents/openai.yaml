@@ -1,0 +1,4 @@
+interface:
+  display_name: "Explain Diff"
+  short_description: "UXからコードまでを段階的に説明する差分解説画面を生成"
+  default_prompt: "Use $explain-diff to create an explanatory walkthrough of the current diff."
