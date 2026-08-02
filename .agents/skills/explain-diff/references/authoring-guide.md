@@ -37,6 +37,8 @@ tmp/explain-diff/<slug>/
 
 ### 変更前後の対比
 
+`.before-after` は変更前と変更後を**縦に積む**。中身はテキストでも図でもよい。
+
 ```html
 <div class="before-after">
   <div>
@@ -68,13 +70,15 @@ sequenceDiagram
 
 #### 変更前後の並べ方
 
-業務フロー図とER図は変更前後の2枚を並べる。`.before-after` は横2列なので図には狭すぎる。**図は `<h4>` で区切って縦に積む。**
+業務フロー図とER図の2枚も、テキストと同じく `.before-after` に入れて縦に積む。横並びにすると各段の幅が半分になり、E2Eの業務フロー図は読めなくなる。
 
 変更後の図では、この変更で増えた・変わったやり取りを `rect` で囲んで塗る。2枚を見比べる負担が減る。
 
 ```html
-<h4>変更前</h4>
-<pre class="mermaid">
+<div class="before-after">
+  <div>
+    <h4>変更前</h4>
+    <pre class="mermaid">
 sequenceDiagram
   participant U as 利用者
   participant API as APIサーバー
@@ -83,9 +87,11 @@ sequenceDiagram
   API ->> DB: 公開設定が有効なコーチを取得
   DB -->> API: コーチ一覧
   API -->> U: 一覧を表示
-</pre>
-<h4>変更後</h4>
-<pre class="mermaid">
+    </pre>
+  </div>
+  <div>
+    <h4>変更後</h4>
+    <pre class="mermaid">
 sequenceDiagram
   participant U as 利用者
   participant API as APIサーバー
@@ -96,7 +102,9 @@ sequenceDiagram
     DB -->> API: 退会者を除いたコーチ一覧
   end
   API -->> U: 一覧を表示
-</pre>
+    </pre>
+  </div>
+</div>
 ```
 
 `rect` は `sequence-diagram` スキルではトランザクション境界にも使う。同じ図で両方を示すときは `Note` でどちらの意味かを添える。
