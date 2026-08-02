@@ -1,6 +1,6 @@
 ---
 name: code-review-frontend
-description: "`code-review` オーケストレータから呼び出される内部サブスキル。単体では起動しない。Next.jsアプリケーションのフロントエンド差分を対象に、正確性、コード品質（アーキテクチャ含む）、パフォーマンス、テスト、セキュリティの観点で並列レビューする。"
+description: "`code-review` オーケストレータから呼び出される内部サブスキル。単体では起動しない。Next.jsアプリケーションのフロントエンド差分を対象に、正確性、コード品質、パフォーマンス、テスト、セキュリティの観点で並列レビューする。"
 context: fork
 ---
 
@@ -19,24 +19,17 @@ git diff "$DIFF_RANGE" -- '*.ts' '*.tsx' '*.js' '*.jsx' 'package.json'
 git diff "$DIFF_RANGE" --name-only
 ```
 
-### 2. 対象領域の判定
-
-変更ファイル一覧から、実行する観点を決める。
-
-| 領域 | 判定条件 |
-|---|---|
-| テスト | `__tests__/`・`*.test.*`・`*.spec.*` の変更。**または実装変更にテスト変更が伴わない場合**（欠落を指摘するため） |
-
-### 3. 並列レビュー
+### 2. 並列レビュー
 
 ## 観点表
 
 | # | 観点 | 実行条件 | モデル | 委譲先 |
 |---|------|---------|--------|---------------------|
 | 1 | 正確性 | 常時 | inherit | `~/.claude/skills/code-review-frontend/references/correctness.md` |
-| 2 | コード品質（アーキテクチャ含む） | 常時 | inherit | `~/.claude/skills/code-review-frontend/references/architecture-nextjs.md`, `~/.claude/skills/code-review-frontend/references/quality-typescript.md`（両方をRead。指摘は「コード品質」観点としてまとめて報告） |
-| 3 | パフォーマンス | 常時 | sonnet | `~/.claude/skills/code-review-frontend/references/performance.md` |
-| 4 | テスト | テスト | inherit | `~/.claude/skills/code-review-frontend/references/testing.md` |
+| 2 | コード品質 | 常時 | inherit | Skill `composition-patterns` |
+| 3 | コード品質 | 常時 | inherit | Skill `react-best-practices` |
+| 4 | パフォーマンス | 常時 | sonnet | `~/.claude/skills/code-review-frontend/references/performance.md` |
+| 5 | テスト | `__tests__/`・`*.test.*`・`*.spec.*` の変更。**または実装変更にテスト変更が伴わない場合** | inherit | `~/.claude/skills/code-review-frontend/references/testing.md` |
 
 セキュリティ観点はオーケストレータが直接担当するため、本スキルの観点表には含めない。
 
@@ -44,7 +37,7 @@ git diff "$DIFF_RANGE" --name-only
 
 モデル列の指定はモデル選択に対応した環境でのみ適用し、未対応の環境では無視してよい。
 
-各サブエージェントには次のプロンプトを渡す。`<リファレンスの絶対パス>` は上表の委譲先、`<diff range>` は手順1で確定した diff range を差し込む。委譲先が2ファイルの観点（コード品質）は、両方の絶対パスを差し込む。
+委譲先がファイルパスの行は、次のプロンプトを渡す。`<リファレンスの絶対パス>` は上表の委譲先、`<diff range>` は手順1で確定した diff range を差し込む。
 
 ```
 あなたは「<観点名>」の観点でコードレビューを行うサブエージェントです。
@@ -63,7 +56,9 @@ diff range: <diff range>
 指摘ごとに次を含めること: 観点 / 重大度 / 信頼度 / ファイル:行 / コード引用 / 問題の説明 / 修正案
 ```
 
-### 4. 検証・出力
+委譲先がSkill名の行は、上記プロンプトの代わりに Skill ツールでそのスキルを起動し、diff rangeを渡して委譲する。そのスキルが利用できない場合は、その行のみをスキップする。
+
+### 3. 検証・出力
 
 サブエージェントの指摘を集約した後、以下の検証パスを適用する。サブエージェントの申告値をそのまま信用しない。
 

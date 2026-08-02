@@ -49,7 +49,6 @@ git diff "origin/$BASE_BRANCH"...HEAD --name-only
 
 1. Skillツールで `security-review` スキル（ビルトイン）を起動し、手順1で確定した差分全体（バックエンド・フロントエンドを問わない）を対象にレビューさせる。結果は次の形式にマッピングする: 観点 / 重大度（🔴Critical・⚠️Warning・💡Suggestionのいずれか）/ 信頼度（0〜100。0:誤検知 / 25:やや自信あり / 50:中程度の自信 / 75:高い自信 / 100:確実）/ ファイル:行 / コード引用 / 問題の説明 / 修正案
 2. `security-review` が利用できない場合、代替のリファレンスは持たない。バックエンド対象があれば、**セキュリティ観点を省略して続行するか、レビュー自体を中断するかをユーザーに確認する**
-3. フロントエンド対象があれば、上記に加えて `code-review-frontend/references/security-nextjs.md` の Next.js 固有チェックを**`security-review` の可否によらず必ず**適用する
 
 ### 5. 結果の統合と出力
 
