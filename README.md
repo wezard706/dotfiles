@@ -35,6 +35,21 @@ Claude Code と Codex の設定を管理するリポジトリ。`./install.sh` �
 
 スキル探索パスの実測: Codex は `~/.codex/skills/` と `~/.agents/skills/` の両方を読む。Claude Code は `~/.claude/skills/` のみを読む。
 
+### 外部スキルの管理
+
+- 内製スキルの正本は `.agents/skills/`
+- 外部スキルの取得元と commit SHA は `.agents/skill-dependencies.json`
+- 非 Skill 形式の適合処理は `.agents/external-skill-adapters/`
+- `./install.sh` は全外部依存を検証後、Codex と Claude Code の両方へ反映
+- 各配置先の `.dotfiles-managed-skills` は、dotfiles が管理するトップレベルスキル名を
+  C ロケール昇順・改行区切り（1行1スキル名）で保持する inventory
+- 前回の inventory にあり現在の bundle にないスキルは削除し、inventory にない管理外スキルは保全
+- スキル本体・削除・inventory は両配置先を一つの transaction として更新し、失敗時は両方を復元
+- 更新時はライセンスと差分を確認し、40桁の commit SHA を手動更新
+- `git` または `jq` の欠如、ネットワーク障害、取得・検証失敗ではインストールを中止
+
+現在の外部スキルは `composition-patterns`、`react-best-practices`、`layered-rails-review` である。
+
 ## dotfiles で管理しないもの
 
 - `~/.codex/config.toml` — 認証・trust・marketplace 等のローカル状態を含むため install.sh では一切触らない
