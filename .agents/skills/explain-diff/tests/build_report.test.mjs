@@ -55,32 +55,6 @@ function codeChanges() {
     ],
     annotations: [
       { lineId: "backend/app/models/user.rb:0:4", text: "公開可否の入口をUserへ集約している" }
-    ],
-    findings: [
-      {
-        id: "finding-cache",
-        groupId: "public-visibility",
-        lineId: "backend/app/models/profile.rb:0:3",
-        severity: "critical",
-        category: "正確性",
-        title: "キャッシュ済みデータで退会状態が再評価されない",
-        detail: "キャッシュ期限まで退会者の情報を返す可能性がある。",
-        suggestion: "返却直前に公開可否を再評価する。",
-        file: "backend/app/models/profile.rb",
-        line: 20
-      },
-      {
-        id: "finding-coverage",
-        groupId: "regression-test",
-        lineId: null,
-        severity: "warning",
-        category: "テスト",
-        title: "直接URL経由の確認が無い",
-        detail: "一覧の除外しか検証していない。",
-        suggestion: "直接URLでの参照不可も検証する。",
-        file: "spec/models/user_spec.rb",
-        line: 2
-      }
     ]
   };
 }
@@ -97,19 +71,11 @@ function chapters(overrides = {}) {
   };
 }
 
-const CODE_REVIEW = [
-  "## 正確性",
-  "- Profile.active のサブクエリ化により <script>alert(1)</script> のような入力も安全に扱える",
-  "## テスト",
-  "- 直接URL経由の確認が無い"
-].join("\n");
-
 async function build(options = {}) {
   return buildReport({
     snapshot: options.snapshot ?? (await snapshot()),
     codeChanges: options.codeChanges ?? codeChanges(),
     chapters: options.chapters ?? chapters(),
-    codeReview: "codeReview" in options ? options.codeReview : CODE_REVIEW,
     title: options.title ?? "退会者の公開情報を非表示にする変更",
     mermaidPath: options.mermaidPath ?? mermaidStub
   });
@@ -138,8 +104,8 @@ test("パッチから安定した行IDとファイル状態を読み取る", asy
 
 test("除外パス配下のファイルをレビュー対象から外す", () => {
   const files = [
-    { path: "tmp/code_review_a.html" },
-    { path: "tmp/explain/x/diff-snapshot.json" },
+    { path: "tmp/explain_diff_a.html" },
+    { path: "tmp/explain-diff/x/diff-snapshot.json" },
     { path: "app/tmp_helper.rb" },
     { path: "backend/app/models/user.rb" }
   ];
@@ -167,20 +133,6 @@ test("要旨とコード解説は省略できない", async () => {
     () => build({ chapters: chapters({ summary: undefined }) }),
     /章 "summary" は省略できません/
   );
-});
-
-test("内部品質レビューを飛ばした組み立てを拒否する", async () => {
-  await assert.rejects(() => build({ codeReview: undefined }), /code-review の出力がありません/);
-  await assert.rejects(() => build({ codeReview: "   \n  " }), /code-review の出力がありません/);
-});
-
-test("レビューの生出力をレポートへ添付し、そのまま表示しない値へ変換する", async () => {
-  const html = await build();
-
-  assert.match(html, /<summary>内部品質レビューの生出力<\/summary>/);
-  assert.match(html, /## 正確性/);
-  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
-  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 });
 
 test("差分の取りこぼしと二重割り当てを検出する", async () => {
@@ -215,18 +167,13 @@ test("左右分割diffで削除を左、追加を右へ置き、行IDを持た�
   );
 });
 
-test("行に紐付く指摘は差分行へ、紐付かない指摘は変更意図の先頭へ出す", async () => {
+test("品質判定のための領域を成果物へ残さない", async () => {
   const html = await build();
 
-  const lineFinding = html.indexOf("キャッシュ済みデータで退会状態が再評価されない");
-  const extraStart = html.lastIndexOf('<div class="diff-extra">', lineFinding);
-  assert.ok(extraStart > -1, "行に紐付く指摘が差分行の直後に出る");
-
-  const groupFinding = html.indexOf("直接URL経由の確認が無い");
-  const groupFindings = html.lastIndexOf('<div class="group-findings">', groupFinding);
-  const panelStart = html.lastIndexOf('data-tab-panel="regression-test"', groupFinding);
-  assert.ok(groupFindings > panelStart, "行に紐付かない指摘は変更意図の先頭に出る");
-  assert.ok(html.indexOf('<div class="diff"', panelStart) > groupFinding, "差分より前に出る");
+  assert.doesNotMatch(html, /data-finding-decision/);
+  assert.doesNotMatch(html, /data-code-review/);
+  assert.doesNotMatch(html, /内部品質/);
+  assert.doesNotMatch(html, /採用した指摘/);
 });
 
 test("注釈は差分行の直後に一度だけ出す", async () => {
@@ -259,7 +206,6 @@ test("レポートのメタデータを埋め込み、スクリプト終端を�
     snapshot: injected,
     codeChanges: changes,
     chapters: chapters(),
-    codeReview: CODE_REVIEW,
     title: "テスト",
     mermaidPath: mermaidStub
   });
@@ -276,7 +222,6 @@ test("Mermaidを同梱し、生成物が外部通信しない", async () => {
     snapshot: await snapshot(),
     codeChanges: codeChanges(),
     chapters: chapters(),
-    codeReview: CODE_REVIEW,
     mermaidPath: path.join(skillDirectory, "assets", "vendor", "mermaid.min.js")
   });
 
@@ -286,13 +231,12 @@ test("Mermaidを同梱し、生成物が外部通信しない", async () => {
 });
 
 test("CLIが章ディレクトリからレポートを生成する", async () => {
-  const workspace = await mkdtemp(path.join(tmpdir(), "explain-code-changes-"));
+  const workspace = await mkdtemp(path.join(tmpdir(), "explain-diff-"));
   const chapterDirectory = path.join(workspace, "chapters");
   await mkdir(chapterDirectory, { recursive: true });
 
   await writeFile(path.join(workspace, "diff-snapshot.json"), JSON.stringify(await snapshot()), "utf8");
   await writeFile(path.join(workspace, "code-changes.json"), JSON.stringify(codeChanges()), "utf8");
-  await writeFile(path.join(workspace, "code-review.md"), CODE_REVIEW, "utf8");
   for (const [name, fragment] of Object.entries(chapters({ overview: undefined }))) {
     if (fragment) await writeFile(path.join(chapterDirectory, `${name}.html`), fragment, "utf8");
   }
@@ -306,7 +250,6 @@ test("CLIが章ディレクトリからレポートを生成する", async () =>
       "--diff", path.join(workspace, "diff-snapshot.json"),
       "--code-changes", path.join(workspace, "code-changes.json"),
       "--chapters", chapterDirectory,
-      "--code-review", path.join(workspace, "code-review.md"),
       "--title", "退会者の公開情報を非表示にする変更",
       "--output", outputPath
     ],
