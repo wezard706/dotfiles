@@ -1,6 +1,6 @@
 ---
 name: explain-diff
-description: Use when a reviewer needs an explanatory walkthrough of a code diff, a visual review screen, or help understanding unfamiliar application changes from user experience down to implementation details. Trigger on requests for 解説付きレビュー, 差分の解説, 変更理解, レビュー画面, or explanations for reviewers unfamiliar with the codebase. Do not trigger for quality review requests asking what is wrong with the code — this skill explains changes, it does not judge them.
+description: コードベースにもアプリケーションにも詳しくないレビュワー向けに、コード差分を解説する単一HTMLレポートを生成する。ユーザー影響→変更の全体像→変更意図ごとのコード解説へ段階的に降りる構成で、業務フロー図（シーケンス図）とER図を添え、レビュワーが差分の行単位でコメントを残せる画面を作る。
 ---
 
 # Explain Diff
@@ -28,7 +28,7 @@ description: Use when a reviewer needs an explanatory walkthrough of a code diff
    `--exclude` には、レビュー対象から外すパスをカンマ区切りで渡す。`tmp` を必ず含める。
    このスキル自身の生成物が `./tmp` に残るため、指定しないと自分の出力を差分として拾う。
 
-3. `assets/report-shell.html` の共通規約と章コメントを読む（このファイルは編集しない。何を書くかはここの章コメントが定める仕様であり、このファイルには重複して書かない）。
+3. `assets/report-template.html` の共通規約と章コメントを読む（このファイルは編集しない。何を書くかはここの章コメントが定める仕様であり、このファイルには重複して書かない）。
 4. [analysis-guide.md](references/analysis-guide.md) に従って変更意図へグループ化し、ユーザー影響を確定する。
 5. [authoring-guide.md](references/authoring-guide.md) に従って `code-changes.json` と章断片HTMLを書く。省略する章はファイルを作らない。
 6. 組み立てる。
@@ -43,17 +43,6 @@ description: Use when a reviewer needs an explanatory walkthrough of a code diff
    ```
 
 7. ブラウザで開いて確認する。開けない環境では絶対パスを返す。
-
-## 失敗したときの読み方
-
-ビルダーは黙って成果物を劣化させず、失敗させる。
-
-| メッセージ | 意味 |
-|---|---|
-| どのグループにも属さない hunk があります | 差分の取りこぼし。`code-changes.json` の `groups[].members` を埋める |
-| 両方に属しています | 同じhunkを2つのグループへ入れている |
-| 外部リソースを参照しています | 章断片に `https://` の参照がある。単一HTMLは外部通信できない |
-| 章 "summary" は省略できません | 要旨とコード解説は必ず書く |
 
 ## 完了条件
 

@@ -1,6 +1,6 @@
 # 章断片の記述規約
 
-各章の本文はHTML断片として書く。何を書くかは `assets/report-shell.html` の章コメントが定める。ここでは書き方だけを扱う。
+各章の本文はHTML断片として書く。何を書くかは `assets/report-template.html` の章コメントが定める。ここでは書き方だけを扱う。
 
 ## 置き場所
 
@@ -52,7 +52,7 @@ tmp/explain-diff/<slug>/
 
 ### 図
 
-Mermaidを使う。テンプレートがライブラリを同梱するので、記法だけを書く。**どの種類をどの章で使うかは `assets/report-shell.html` の共通規約が定める。ここでは書き方だけを扱う。**
+Mermaidを使う。テンプレートがライブラリを同梱するので、記法だけを書く。**どの種類をどの章で使うかは `assets/report-template.html` の共通規約が定める。ここでは書き方だけを扱う。**
 
 ```html
 <pre class="mermaid">
