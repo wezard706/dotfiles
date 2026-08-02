@@ -6,7 +6,7 @@ Claude Code と Codex の設定を管理するリポジトリ。`./install.sh` �
 
 - `.agents/` — Claude / Codex 共有ソースの正本
   - `AGENTS.md` — 行動原則・コミュニケーション（ツール中立の表現。`~/.claude/CLAUDE.md` と `~/.codex/AGENTS.md` の共通ヘッダ）
-  - `rules/` — 共有ルール（design-proposal / terminology / development-principles / rails-principles）
+  - `rules/` — 共有ルール（design-proposal / terminology / development-principles / rails-principles / nextjs-principles）
   - `skills/` — 共有スキル
 - `.claude/` — Claude Code 専用（hooks・CLAUDE.local.md）
 - `git/` — git エイリアス
