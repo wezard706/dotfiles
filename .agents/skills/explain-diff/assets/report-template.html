@@ -99,11 +99,13 @@
     font-size: 0.86em;
   }
 
-  /* AIが章本文で使う対比ブロック */
+  /* AIが章本文で使う変更前後の対比ブロック。
+     横並びにすると各段の幅が半分になり、E2Eの業務フロー図が読めない。
+     図もテキストも同じ書き方で扱えるよう、常に縦へ積む */
   .before-after {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 28px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
     margin: 10px 0 20px;
   }
 
@@ -334,7 +336,6 @@
     .toc { position: static; max-height: none; padding: 20px 0 0; }
     .toc ol { display: flex; flex-wrap: wrap; gap: 4px; }
     .toc a { border-left: 0; border-bottom: 2px solid transparent; }
-    .before-after { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   }
 </style>
 </head>
