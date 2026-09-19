@@ -4,14 +4,12 @@ set -e
 # Dotfiles Installer
 # This script installs:
 #   - Claude Code skills, CLAUDE.md, and rules
-#   - Codex AGENTS.md
 # Run this script from the cloned repository directory
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$SCRIPT_DIR/.claude"
-AGENTS_SOURCE_DIR="$SCRIPT_DIR/.agents"
-EXTERNAL_SKILL_ADAPTERS_DIR="$AGENTS_SOURCE_DIR/external-skill-adapters"
-SKILL_DEPENDENCIES_FILE="${SKILL_DEPENDENCIES_FILE:-$AGENTS_SOURCE_DIR/skill-dependencies.json}"
+EXTERNAL_SKILL_ADAPTERS_DIR="$SOURCE_DIR/external-skill-adapters"
+SKILL_DEPENDENCIES_FILE="${SKILL_DEPENDENCIES_FILE:-$SOURCE_DIR/skill-dependencies.json}"
 EXTERNAL_SKILL_INSTALLER="$SCRIPT_DIR/scripts/install_external_skills.sh"
 SKILL_BUNDLE_ROOT="$(mktemp -d)"
 SKILL_BUNDLE_ROOT="$(cd "$SKILL_BUNDLE_ROOT" && pwd -P)"
@@ -23,8 +21,6 @@ CLAUDE_DIR="$HOME/.claude"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 RULES_DIR="$CLAUDE_DIR/rules"
 GIT_SOURCE_DIR="$SCRIPT_DIR/git"
-CODEX_DIR="$HOME/.codex"
-AGENTS_DIR="$HOME/.agents"
 
 skill_install_error() {
     echo "❌ Managed skill installation failed: $*" >&2
@@ -232,54 +228,26 @@ cleanup_skill_transaction() {
 
 install_managed_skills_transaction() {
     bundle_dir="$1"
-    first_target_dir="$2"
-    second_target_dir="$3"
+    target_dir="$2"
     current_inventory="$SKILL_BUNDLE_ROOT/managed-skills"
-    first_apply_started=0
-    second_apply_started=0
-    rollback_status=0
-    first_transaction_prepared=0
 
     build_managed_skills_inventory "$bundle_dir" "$current_inventory" || return 1
     validate_managed_skills_inventory "$current_inventory" || return 1
 
-    if ! prepare_skill_target "$bundle_dir" "$first_target_dir" "$current_inventory"; then
+    if ! prepare_skill_target "$bundle_dir" "$target_dir" "$current_inventory"; then
         if [ "$SKILL_TRANSACTION_CREATED" -eq 1 ]; then
-            cleanup_skill_transaction "$first_target_dir"
+            cleanup_skill_transaction "$target_dir"
         fi
         return 1
     fi
-    first_transaction_prepared=1
-    if ! prepare_skill_target "$bundle_dir" "$second_target_dir" "$current_inventory"; then
-        if [ "$SKILL_TRANSACTION_CREATED" -eq 1 ]; then
-            cleanup_skill_transaction "$second_target_dir"
-        fi
-        if [ "$first_transaction_prepared" -eq 1 ]; then
-            cleanup_skill_transaction "$first_target_dir"
-        fi
-        return 1
-    fi
-    first_apply_started=1
-    if apply_skill_target "$first_target_dir"; then
-        second_apply_started=1
-        if apply_skill_target "$second_target_dir"; then
-            cleanup_skill_transaction "$second_target_dir"
-            cleanup_skill_transaction "$first_target_dir"
-            return 0
-        fi
+    if apply_skill_target "$target_dir"; then
+        cleanup_skill_transaction "$target_dir"
+        return 0
     fi
 
-    skill_install_error 'could not apply both skill installation targets; restoring previous state' || true
-    if [ "$second_apply_started" -eq 1 ] && ! rollback_skill_target "$second_target_dir"; then
-        rollback_status=1
-    fi
-    if [ "$first_apply_started" -eq 1 ] && ! rollback_skill_target "$first_target_dir"; then
-        rollback_status=1
-    fi
-
-    if [ "$rollback_status" -eq 0 ]; then
-        cleanup_skill_transaction "$second_target_dir"
-        cleanup_skill_transaction "$first_target_dir"
+    skill_install_error 'could not apply skill installation; restoring previous state' || true
+    if rollback_skill_target "$target_dir"; then
+        cleanup_skill_transaction "$target_dir"
     else
         skill_install_error 'rollback failed; transaction backups were preserved' || true
     fi
@@ -287,7 +255,6 @@ install_managed_skills_transaction() {
 }
 
 reject_symlink_path_components "$SKILLS_DIR" 'Claude Code skill installation target'
-reject_symlink_path_components "$AGENTS_DIR/skills" 'Codex skill installation target'
 
 echo "Installing dotfiles..."
 echo ""
@@ -313,14 +280,14 @@ rm -rf "$RULES_DIR"
 mkdir -p "$RULES_DIR"
 mkdir -p "$SKILLS_DIR"
 
-# Install CLAUDE.md (.agents/AGENTS.md を正本とするコピー)
+# Install CLAUDE.md
 echo "📝 Installing CLAUDE.md..."
-cp "$AGENTS_SOURCE_DIR/AGENTS.md" "$CLAUDE_DIR/CLAUDE.md"
+cp "$SOURCE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
 
 # Install rules
 echo ""
 echo "📋 Installing rules..."
-for rule_file in "$AGENTS_SOURCE_DIR"/rules/*.md; do
+for rule_file in "$SOURCE_DIR"/rules/*.md; do
     if [ -f "$rule_file" ]; then
         rule_name=$(basename "$rule_file")
         echo "   Installing rule: $rule_name"
@@ -328,15 +295,15 @@ for rule_file in "$AGENTS_SOURCE_DIR"/rules/*.md; do
     fi
 done
 
-# Install skills (正本は .agents/skills)
+# Install skills
 echo ""
 echo "📚 Installing skills..."
 "$EXTERNAL_SKILL_INSTALLER" \
     "$SKILL_DEPENDENCIES_FILE" \
-    "$AGENTS_SOURCE_DIR/skills" \
+    "$SOURCE_DIR/skills" \
     "$EXTERNAL_SKILL_ADAPTERS_DIR" \
     "$SKILL_BUNDLE_DIR"
-install_managed_skills_transaction "$SKILL_BUNDLE_DIR" "$SKILLS_DIR" "$AGENTS_DIR/skills"
+install_managed_skills_transaction "$SKILL_BUNDLE_DIR" "$SKILLS_DIR"
 for skill_dir in "$SKILLS_DIR"/*/; do
     if [ -d "$skill_dir" ]; then
         skill_name=$(basename "$skill_dir")
@@ -373,60 +340,12 @@ if [ -d "$SOURCE_DIR/hooks" ]; then
     done
 fi
 
-# Install Codex configuration.
-# ~/.codex/config.toml はローカル状態（認証・trust・marketplaceパス等）を含むため
-# このスクリプトでは一切触らない。
-echo ""
-echo "🤖 Installing Codex configuration..."
-mkdir -p "$CODEX_DIR"
-
-# AGENTS.md は .agents/AGENTS.md をヘッダに .agents/rules/*.md を連結して生成する。
-# rules の paths frontmatter は Codex に相当機構がないため、
-# 先頭見出し直後の「このセクションは〜に適用する」文へ変換する。
-{
-    cat "$AGENTS_SOURCE_DIR/AGENTS.md"
-    for rule_file in "$AGENTS_SOURCE_DIR"/rules/*.md; do
-        [ -f "$rule_file" ] || continue
-        echo ""
-        awk '
-            FNR == 1 && $0 == "---" { in_fm = 1; next }
-            in_fm && $0 == "---" { in_fm = 0; next }
-            in_fm {
-                if (match($0, /"[^"]+"/)) {
-                    pat = substr($0, RSTART + 1, RLENGTH - 2)
-                    pats = pats (pats == "" ? "" : ", ") "`" pat "`"
-                }
-                next
-            }
-            !scope_done && /^# / {
-                print
-                if (pats != "") {
-                    print ""
-                    print "このセクションは " pats " に該当するファイルを扱うときに適用する。"
-                }
-                scope_done = 1
-                next
-            }
-            { print }
-        ' "$rule_file"
-    done
-} > "$CODEX_DIR/AGENTS.md"
-echo "   Generated AGENTS.md"
-
-for skill_dir in "$AGENTS_DIR/skills"/*/; do
-    if [ -d "$skill_dir" ]; then
-        skill_name=$(basename "$skill_dir")
-        echo "   Installing shared skill: $skill_name"
-    fi
-done
-
 echo ""
 echo "Installation complete!"
 echo ""
 echo "Installed files:"
 echo "  - $HOME/.gitconfig.aliases"
 echo "  - $CLAUDE_DIR/CLAUDE.md"
-echo "  - $CODEX_DIR/AGENTS.md"
 for rule_file in "$RULES_DIR"/*.md; do
     if [ -f "$rule_file" ]; then
         echo "  - $rule_file"

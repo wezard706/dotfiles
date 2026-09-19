@@ -1,21 +1,21 @@
 ---
-name: code-review-backend
-description: "`code-review` オーケストレータから呼び出される内部サブスキル。単体では起動しない。Railsアプリケーションのバックエンド差分を対象に、正確性、コード品質、パフォーマンス、テストの観点で並列レビューする。"
+name: code-review-frontend
+description: "`code-review` オーケストレータから呼び出される内部サブスキル。単体では起動しない。Next.jsアプリケーションのフロントエンド差分を対象に、正確性、コード品質、パフォーマンス、テスト、セキュリティの観点で並列レビューする。"
 context: fork
 ---
 
-# コードレビュー — バックエンド
+# コードレビュー — フロントエンド
 
-`code-review` オーケストレータから diff を受け取り、バックエンドの観点別サブエージェントを並列起動して検証済みの指摘を返す。ベースブランチの決定・最新化・最終出力の整形はオーケストレータの責務であり、本スキルは行わない。
+`code-review` オーケストレータから diff range を受け取り、フロントエンドの観点別サブエージェントを並列起動して検証済みの指摘を返す。ベースブランチの決定・最新化・最終出力の整形はオーケストレータの責務であり、本スキルは行わない。
 
 ## ワークフロー
 
 ### 1. 差分の取得
 
-オーケストレータから渡された diff をそのまま使う。ベースブランチの再決定・再fetchは行わない。
+オーケストレータから渡された diff range をそのまま使う。ベースブランチの再決定・再fetchは行わない。
 
 ```bash
-git diff "$DIFF_RANGE" -- '*.rb' 'Gemfile' 'db/migrate/*' 'db/schema.rb' 'app/**' 'spec/**' 'test/**'
+git diff "$DIFF_RANGE" -- '*.ts' '*.tsx' '*.js' '*.jsx' 'package.json'
 git diff "$DIFF_RANGE" --name-only
 ```
 
@@ -25,23 +25,23 @@ git diff "$DIFF_RANGE" --name-only
 
 | # | 観点 | 実行条件 | モデル | 委譲先 |
 |---|------|---------|--------|---------------------|
-| 1 | 正確性 | 常時 | inherit | `~/.claude/skills/code-review-backend/references/correctness.md` |
-| 2 | コード品質 | 常時 | inherit | `~/.claude/skills/code-review-backend/references/code-quality.md` |
-| 3 | コード品質 | 常時 | inherit | Skill `layered-rails-review` |
-| 4 | パフォーマンス | 常時 | sonnet | `~/.claude/skills/code-review-backend/references/performance.md` |
-| 5 | テスト | `spec/`・`test/` の変更。**または実装変更にテスト変更が伴わない場合** | inherit | `~/.claude/skills/code-review-backend/references/testing.md` |
+| 1 | 正確性 | 常時 | inherit | `~/.claude/skills/code-review-frontend/references/correctness.md` |
+| 2 | コード品質 | 常時 | inherit | Skill `composition-patterns` |
+| 3 | コード品質 | 常時 | inherit | Skill `react-best-practices` |
+| 4 | パフォーマンス | 常時 | sonnet | `~/.claude/skills/code-review-frontend/references/performance.md` |
+| 5 | テスト | `__tests__/`・`*.test.*`・`*.spec.*` の変更。**または実装変更にテスト変更が伴わない場合** | inherit | `~/.claude/skills/code-review-frontend/references/testing.md` |
 
-上記の観点のうち、実行条件を満たすものをすべて**並列で**サブエージェント（Claude Code の `Task`/`Agent` ツール、Codex の `collaboration.spawn_agent` 等）に委譲する。サブエージェント機構が利用できない場合は、ユーザーに報告する。
+セキュリティ観点はオーケストレータが直接担当するため、本スキルの観点表には含めない。
 
-モデルの指定はモデル選択に対応した環境でのみ適用し、未対応の環境では無視してよい。
+上記の観点のうち、実行条件を満たすものをすべて**並列で**サブエージェント（`Agent` ツール）に委譲する。
 
-委譲先がファイルパスの行は、次のプロンプトを渡す。`<リファレンスの絶対パス>` は上表の委譲先、`<diff>` は手順1で確定した diff を差し込む。
+委譲先がファイルパスの行は、次のプロンプトを渡す。`<リファレンスの絶対パス>` は上表の委譲先、`<diff range>` は手順1で確定した diff range を差し込む。
 
 ```
 あなたは「<観点名>」の観点でコードレビューを行うサブエージェントです。
 
 ## レビュー範囲
-diff: <diff>
+diff range: <diff range>
 変更行に起因する問題のみを対象とすること。変更していない行の既存問題は指摘しない。
 
 ## リファレンス
@@ -54,7 +54,7 @@ diff: <diff>
 指摘ごとに次を含めること: 観点 / 重大度 / 信頼度 / ファイル:行 / コード引用 / 問題の説明 / 修正案
 ```
 
-委譲先がSkill名の行は、上記プロンプトの代わりに Skill ツールでそのスキルを起動し、diffを渡して委譲する。そのスキルが利用できない場合は、その行のみをスキップする。
+委譲先がSkill名の行は、上記プロンプトの代わりに Skill ツールでそのスキルを起動し、diff rangeを渡して委譲する。そのスキルが利用できない場合は、その行のみをスキップする。
 
 ### 3. 検証・出力
 
@@ -69,7 +69,7 @@ diff: <diff>
 
 - 変更前から存在していた問題（ただし「変更したロジックへのテスト欠落」は、テスト基盤が元から無い場合でも新規の問題として扱い、除外しない）
 - リンター・型チェッカー・コンパイラが検出する問題
-- CLAUDE.md / AGENTS.md で明示的に抑制されている問題（lint ignoreコメント等）
+- CLAUDE.md で明示的に抑制されている問題（lint ignoreコメント等）
 - 意図的な機能変更に対する指摘
 - 変更していない行に対する指摘
 - シニアエンジニアが指摘しないような些細なnitpick
