@@ -1,7 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# PostToolUse hook (Edit/Write/MultiEdit):
+# claude_hook_event: PostToolUse
+# claude_hook_matcher: Edit|Write|MultiEdit
+#
 # .rb ファイルに新規追加されたコメント行を検出し、コードコメント規約
 # （~/.claude/rules/development-principles.md）への自己レビューを促す。
 # 既存行の移動による誤検出を避けるため、Edit では old_string に含まれる行を除外する。
