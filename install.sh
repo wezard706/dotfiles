@@ -312,9 +312,11 @@ for skill_dir in "$SKILLS_DIR"/*/; do
 done
 
 # Install hooks and wire them into settings.json so they fire in every project.
-# Hook スクリプトを ~/.claude/hooks/ に配置し、PostToolUse 配線を
-# ~/.claude/settings.json へマージする。他キー・他フックは保全し、
-# 同一コマンドの重複は除くため再実行しても冪等。
+# Hook スクリプトを ~/.claude/hooks/ に配置し、配線を ~/.claude/settings.json へ
+# マージする。発火イベントとマッチャはフック本体の
+# `# claude_hook_event:` / `# claude_hook_matcher:` 行から読む（配線先をフック側の
+# 正本に持たせ、フック追加時に install.sh を触らずに済ませる）。
+# 他キー・他フックは保全し、同一コマンドの重複は除くため再実行しても冪等。
 if [ -d "$SOURCE_DIR/hooks" ]; then
     echo ""
     echo "🪝 Installing hooks..."
@@ -325,17 +327,25 @@ if [ -d "$SOURCE_DIR/hooks" ]; then
     for hook_file in "$SOURCE_DIR"/hooks/*.rb; do
         [ -f "$hook_file" ] || continue
         hook_name=$(basename "$hook_file")
-        echo "   Installing hook: $hook_name"
+        hook_event=$(sed -n 's/^#[[:space:]]*claude_hook_event:[[:space:]]*//p' "$hook_file" | head -1)
+        hook_matcher=$(sed -n 's/^#[[:space:]]*claude_hook_matcher:[[:space:]]*//p' "$hook_file" | head -1)
+        hook_event=${hook_event:-PostToolUse}
+        hook_matcher=${hook_matcher:-"Edit|Write|MultiEdit"}
+        echo "   Installing hook: $hook_name ($hook_event / $hook_matcher)"
         cp "$hook_file" "$HOOKS_DIR/$hook_name"
         chmod +x "$HOOKS_DIR/$hook_name"
         hook_cmd="ruby \"$HOOKS_DIR/$hook_name\""
-        jq --arg cmd "$hook_cmd" '
+        jq --arg cmd "$hook_cmd" --arg event "$hook_event" --arg matcher "$hook_matcher" '
           .hooks //= {} |
-          .hooks.PostToolUse //= [] |
-          .hooks.PostToolUse |= (
-            map(select((.hooks // []) | any(.command == $cmd) | not))
-            + [{"matcher": "Edit|Write|MultiEdit", "hooks": [{"type": "command", "command": $cmd}]}]
-          )
+          .hooks |= with_entries(
+            .value |= (
+              if type == "array"
+              then map(select((.hooks // []) | any(.command == $cmd) | not))
+              else . end
+            )
+          ) |
+          .hooks[$event] //= [] |
+          .hooks[$event] += [{"matcher": $matcher, "hooks": [{"type": "command", "command": $cmd}]}]
         ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
     done
 fi
