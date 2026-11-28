@@ -7,13 +7,15 @@
 # .rb の追加差分をコードコメント規約（~/.claude/rules/development-principles.md）に
 # 照らし、宣言系コメントの欠落と実装内コメントの過剰を指摘する。
 # 宣言系と実装系で規約の既定が逆（書く / 書かない）なため、コメントは位置で分類する。
+# 散文の要否は WHY の有無で決まり機械判定できないため、フックは YARD タグの欠落だけを見る。
 # 既存行の移動による誤検出を避けるため、Edit では old_string に含まれる行を除外する。
 # 宣言の解析には prism を使い、不在環境では実装内コメントの検査だけに縮退する。
 
 require 'json'
 
-ANNOTATION = /\A#:|\A#\s*@rbs\b|\A#\s*rbs_inline:/.freeze
-TRAILING_ANNOTATION = /#:\s*\S/.freeze
+YARD_TAG = /\A#\s*@\w+/.freeze
+YARD_PARAM = /\A#\s*@param\s+(?:\[[^\]]*\]\s*)?(\S+)/.freeze
+YARD_RETURN = /\A#\s*@return\b/.freeze
 BOILERPLATE = /frozen_string_literal|rubocop:|\A#!|shareable_constant_value|typed:|encoding:/.freeze
 EXCLUDED_PATH = %r{_spec\.rb\z|/db/migrate/}.freeze
 DECLARATION = /
@@ -21,7 +23,7 @@ DECLARATION = /
   |\A\s*attr_(?:reader|writer|accessor)\b
 /x.freeze
 
-Declaration = Struct.new(:kind, :line, :visibility, :name)
+Declaration = Struct.new(:kind, :line, :name, :parameters)
 
 # ヒアドキュメント内の式展開 `#{...}` は行頭に `#` が来るため、コメントと区別する。
 def comment?(line)
@@ -60,38 +62,42 @@ def statements_of(node)
   body.is_a?(Prism::StatementsNode) ? body.body : []
 end
 
-def symbol_arguments(call)
-  (call.arguments&.arguments || []).filter_map do |arg|
-    arg.unescaped.to_s if arg.is_a?(Prism::SymbolNode)
-  end
+# ブロック引数は @yield 系で書く流儀もあるため @param を要求しない。
+def parameter_names(def_node)
+  params = def_node.parameters
+  return [] if params.nil?
+
+  nodes = params.requireds + params.optionals + params.posts + params.keywords
+  nodes += [params.rest, params.keyword_rest].compact
+  nodes.filter_map { |node| node.name&.to_s if node.respond_to?(:name) }
 end
 
-def scan_visibility_call(call, visibility, out, demoted)
-  demoted.concat(symbol_arguments(call)) unless call.name == :public
-  (call.arguments&.arguments || []).each do |arg|
-    next unless arg.is_a?(Prism::DefNode)
-
-    out << Declaration.new(:method, arg.location.start_line, call.name, arg.name.to_s)
-  end
-  call.arguments.nil? ? call.name : visibility
-end
-
-def scan_scope(statements, out, demoted, visibility = :public)
+# クラス・モジュールの外にある def は公開APIの面を持たないため対象外にする
+# （スクリプトのトップレベル定義が該当する）。
+def scan_scope(statements, out, inside_type: false)
   statements.each do |stmt|
     case stmt
     when Prism::ClassNode, Prism::ModuleNode
-      out << Declaration.new(:type, stmt.location.start_line, nil, nil)
-      scan_scope(statements_of(stmt), out, demoted)
+      out << Declaration.new(:type, stmt.location.start_line, nil, [])
+      scan_scope(statements_of(stmt), out, inside_type: true)
     when Prism::SingletonClassNode
-      scan_scope(statements_of(stmt), out, demoted)
+      scan_scope(statements_of(stmt), out, inside_type: inside_type)
     when Prism::DefNode
-      out << Declaration.new(:method, stmt.location.start_line, visibility, stmt.name.to_s)
+      next unless inside_type
+
+      out << Declaration.new(:method, stmt.location.start_line, stmt.name.to_s, parameter_names(stmt))
     when Prism::CallNode
+      next unless inside_type
+
       case stmt.name
       when :private, :protected, :public
-        visibility = scan_visibility_call(stmt, visibility, out, demoted)
+        (stmt.arguments&.arguments || []).each do |arg|
+          next unless arg.is_a?(Prism::DefNode)
+
+          out << Declaration.new(:method, arg.location.start_line, arg.name.to_s, parameter_names(arg))
+        end
       when :attr_reader, :attr_writer, :attr_accessor
-        out << Declaration.new(:attr, stmt.location.start_line, visibility, nil)
+        out << Declaration.new(:attr, stmt.location.start_line, nil, [])
       end
     end
   end
@@ -102,33 +108,37 @@ def declarations(source)
   return [] if result.failure?
 
   out = []
-  demoted = []
-  scan_scope(statements_of(result.value), out, demoted)
-  out.each { |decl| decl.visibility = :private if demoted.include?(decl.name) }
+  scan_scope(statements_of(result.value), out)
   out
 end
 
 def prose?(block)
-  block.any? { |comment| !(comment =~ ANNOTATION) && !(comment =~ BOILERPLATE) }
+  block.any? do |comment|
+    !(comment =~ YARD_TAG) && !(comment =~ BOILERPLATE) && comment.sub(/\A#+/, '').strip != ''
+  end
 end
 
-def annotated?(block, declaration_line)
-  block.any? { |comment| comment =~ ANNOTATION } ||
-    (!comment?(declaration_line) && declaration_line =~ TRAILING_ANNOTATION)
+def documented_parameters(block)
+  block.filter_map { |comment| comment[YARD_PARAM, 1] }
+end
+
+# initialize とセッターは、YARD の慣習として戻り値を書かない。
+def return_tag_required?(declaration)
+  declaration.name != 'initialize' && !declaration.name.to_s.end_with?('=')
 end
 
 def missing_requirements(declaration, lines)
-  declaration_line = lines[declaration.line - 1].to_s
   block = comment_block_above(lines, declaration.line)
   missing = []
   case declaration.kind
   when :type
-    missing << '責務を述べる散文コメント' unless prose?(block)
+    missing << '責務を述べる散文' unless prose?(block)
   when :method
-    missing << '散文コメント' if declaration.visibility == :public && !prose?(block)
-    missing << 'rbs-inline 型注釈（#:）' unless annotated?(block, declaration_line)
+    undocumented = declaration.parameters - documented_parameters(block)
+    missing << "@param（#{undocumented.join(', ')}）" unless undocumented.empty?
+    missing << '@return' if return_tag_required?(declaration) && block.none? { |c| c =~ YARD_RETURN }
   when :attr
-    missing << '行末の型注釈（#: Type）' unless annotated?(block, declaration_line)
+    missing << '@return' if block.none? { |c| c =~ YARD_RETURN }
   end
   missing
 end
@@ -157,7 +167,7 @@ exit 0 if added.empty?
 
 lines = File.file?(path) ? File.read(path).lines.map(&:rstrip) : []
 
-body_comments = added_comments.reject { |c| c =~ ANNOTATION || c =~ BOILERPLATE }.select do |comment|
+body_comments = added_comments.reject { |c| c =~ BOILERPLATE }.select do |comment|
   index = lines.index { |line| comment?(line) && line.strip == comment.strip }
   index.nil? || !declaration_comment?(lines, index)
 end
@@ -185,12 +195,12 @@ messages = []
 
 unless undocumented.empty?
   messages << <<~SECTION
-    [宣言系コメントの欠落] 追加した宣言に必須のコメント・型注釈がない:
+    [宣言系コメントの欠落] 追加した宣言に必須の YARD タグがない:
     #{undocumented.join("\n")}
 
     ~/.claude/rules/development-principles.md の「コードコメント規約」を Read で参照し、
-    宣言系コメントの規約に従って追記せよ。型注釈は rbs-inline の `#:` 形式で書くこと。
-    散文はメソッド名の言い換えではなく、責務と契約（事前条件・副作用・戻り値の意味）を述べること。
+    宣言系コメントの規約に従って追記せよ。形式は YARD（@param・@return・@raise）に従うこと。
+    メソッドの散文は WHY だけを書く。WHAT と自明な WHY は書かないこと。
   SECTION
 end
 

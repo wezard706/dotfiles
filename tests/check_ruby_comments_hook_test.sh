@@ -52,7 +52,7 @@ assert_absent() {
   fi
 }
 
-echo "== public メソッド: コメント皆無なら散文と型注釈の両方を指摘 =="
+echo "== メソッド: YARD タグが無ければ @param と @return を指摘 =="
 run_write bare.rb '# 予約の重複検知と成立判定を担う
 class Reservation
   def book(coach)
@@ -60,58 +60,85 @@ class Reservation
   end
 end
 '
-assert_flagged "public bare" "宣言系コメントの欠落" "散文コメント" "rbs-inline 型注釈"
+assert_flagged "method bare" "宣言系コメントの欠落" "@param（coach）" "@return"
 
-echo "== public メソッド: 散文のみなら型注釈を指摘 =="
+echo "== メソッド: WHY が無ければ散文なしでも通る =="
+run_write tags_only.rb '# 予約の重複検知と成立判定を担う
+class Reservation
+  # @param coach [Coach] 担当コーチ
+  # @return [Reservation] 成立した予約
+  def book(coach)
+    coach
+  end
+end
+'
+assert_ok "tags without prose"
+
+echo "== メソッド: 散文だけでタグが無ければ指摘 =="
 run_write prose_only.rb '# 予約の重複検知と成立判定を担う
 class Reservation
-  # コーチを指定して予約を確定
+  # 二重予約の検知を DB のユニーク制約に委ねず、ここで判定する。
+  # 制約違反の例外を UI に出さないため
   def book(coach)
     coach
   end
 end
 '
-assert_flagged "prose only" "rbs-inline 型注釈"
-assert_absent "prose only" "不足: 散文コメント"
+assert_flagged "prose only" "@param（coach）" "@return"
 
-echo "== public メソッド: 型注釈のみなら散文を指摘 =="
-run_write annotation_only.rb '# 予約の重複検知と成立判定を担う
-class Reservation
-  #: (Coach) -> void
-  def book(coach)
-    coach
-  end
-end
-'
-assert_flagged "annotation only" "不足: 散文コメント"
-assert_absent "annotation only" "rbs-inline 型注釈（#:）"
-
-echo "== public メソッド: 散文と型注釈が揃えば通る =="
+echo "== メソッド: WHY の散文とタグが揃えば通る =="
 run_write complete.rb '# 予約の重複検知と成立判定を担う
 class Reservation
-  # コーチを指定して予約を確定
-  #: (Coach) -> void
+  # 二重予約の検知を DB のユニーク制約に委ねず、ここで判定する。
+  # 制約違反の例外を UI に出さないため
+  #
+  # @param coach [Coach] 担当コーチ
+  # @return [Reservation] 成立した予約
+  # @raise [Conflict] 重複する予約がある場合
   def book(coach)
     coach
   end
 end
 '
-assert_ok "complete"
+assert_ok "prose with tags"
 
-echo "== private メソッド: 型注釈のみで通る =="
-run_write private_ok.rb '# 予約の重複検知と成立判定を担う
+echo "== @param [Type] name の語順も認める =="
+run_write param_order.rb '# 予約の重複検知と成立判定を担う
 class Reservation
-  private
-
-  #: () -> bool
-  def slot_available?
-    true
+  # @param [Coach] coach 担当コーチ
+  # @return [Reservation] 成立した予約
+  def book(coach)
+    coach
   end
 end
 '
-assert_ok "private with annotation"
+assert_ok "param type-first order"
 
-echo "== private メソッド: 型注釈が無ければ指摘し、散文は求めない =="
+echo "== 複数引数: 書き漏らした引数だけを指摘 =="
+run_write partial_params.rb '# 予約の重複検知と成立判定を担う
+class Reservation
+  # @param coach [Coach] 担当コーチ
+  # @return [Reservation] 成立した予約
+  def book(coach, starts_at, notify: false)
+    coach
+  end
+end
+'
+assert_flagged "partial params" "@param（starts_at, notify）"
+assert_absent "partial params" "@param（coach"
+
+echo "== ブロック引数には @param を要求しない =="
+run_write block_param.rb '# 予約の重複検知と成立判定を担う
+class Reservation
+  # @return [void]
+  def each(&block)
+    block
+  end
+end
+'
+assert_ok "block parameter"
+
+echo "== private メソッドにもタグを要求する =="
 run_write private_bare.rb '# 予約の重複検知と成立判定を担う
 class Reservation
   private
@@ -121,85 +148,121 @@ class Reservation
   end
 end
 '
-assert_flagged "private bare" "rbs-inline 型注釈"
-assert_absent "private bare" "不足: 散文コメント"
+assert_flagged "private bare" "@return"
 
-echo "== private def 形式も private と判定する =="
+echo "== private メソッド: タグが揃えば通る =="
+run_write private_ok.rb '# 予約の重複検知と成立判定を担う
+class Reservation
+  private
+
+  # @return [Boolean]
+  def slot_available?
+    true
+  end
+end
+'
+assert_ok "private with tags"
+
+echo "== private def 形式も宣言として拾う =="
 run_write private_inline.rb '# 予約の重複検知と成立判定を担う
 class Reservation
-  #: () -> bool
   private def slot_available?
     true
   end
 end
 '
-assert_ok "private def form"
+assert_flagged "private def form" "@return"
 
-echo "== private :foo 形式も private と判定する =="
-run_write private_symbol.rb '# 予約の重複検知と成立判定を担う
+echo "== initialize とセッターには @return を要求しない =="
+run_write no_return_tag.rb '# 予約の重複検知と成立判定を担う
 class Reservation
-  #: () -> bool
-  def slot_available?
-    true
+  # @param starts_at [Time] 予約開始時刻
+  def initialize(starts_at)
+    @starts_at = starts_at
   end
 
-  private :slot_available?
+  # @param value [Time] 新しい開始時刻
+  def starts_at=(value)
+    @starts_at = value
+  end
 end
 '
-assert_ok "private symbol form"
+assert_ok "initialize and setter"
 
-echo "== 入れ子クラスの public メソッドにも散文を要求する =="
+echo "== 入れ子クラスのメソッドにもタグを要求する =="
 run_write nested.rb '# 予約の重複検知と成立判定を担う
 class Reservation
   # 予約枠の空き状況を表す
   class Slot
-    #: () -> bool
     def open?
       true
     end
   end
 end
 '
-assert_flagged "nested public" "不足: 散文コメント"
+assert_flagged "nested method" "@return"
+
+echo "== クラス・モジュール外のトップレベル def は対象外 =="
+run_write toplevel.rb '# frozen_string_literal: true
+
+def comment?(line)
+  line.start_with?("#")
+end
+
+private def helper(path, mode)
+  [path, mode]
+end
+'
+assert_ok "top-level def"
+
+echo "== モジュール内の def は対象外にしない =="
+run_write module_method.rb '# コメント行の判定を提供する
+module Commentable
+  def comment?(line)
+    line.start_with?("#")
+  end
+end
+'
+assert_flagged "module method" "@param（line）" "@return"
 
 echo "== class: 責務の散文が無ければ指摘 =="
 run_write class_bare.rb 'class Reservation
 end
 '
-assert_flagged "class bare" "責務を述べる散文コメント"
+assert_flagged "class bare" "責務を述べる散文"
 
-echo "== attr_reader: 行末の型注釈が無ければ指摘 =="
+echo "== class: 責務の散文があれば通る =="
+run_write class_documented.rb '# 予約の重複検知と成立判定を担う
+class Reservation
+end
+'
+assert_ok "class documented"
+
+echo "== attr_reader: @return が無ければ指摘 =="
 run_write attr_bare.rb '# 予約の重複検知と成立判定を担う
 class Reservation
   attr_reader :starts_at
 end
 '
-assert_flagged "attr bare" "行末の型注釈"
+assert_flagged "attr bare" "@return"
 
-echo "== attr_reader: 行末注釈があれば通る =="
+echo "== attr_reader: @return があれば通る =="
 run_write attr_ok.rb '# 予約の重複検知と成立判定を担う
 class Reservation
-  attr_reader :starts_at #: Time
+  # @return [Time] 予約開始時刻
+  attr_reader :starts_at
 end
 '
-assert_ok "attr annotated"
-
-echo "== def 行末の型注釈も認める =="
-run_write trailing_def.rb '# 予約の重複検知と成立判定を担う
-class Reservation
-  # 人間可読の表現を返す
-  def to_s #: String
-    ""
-  end
-end
-'
-assert_ok "trailing def annotation"
+assert_ok "attr documented"
 
 echo "== 宣言に付く散文は実装内コメントとして指摘されない =="
 run_write doc_not_suppressed.rb '# 予約の重複検知と成立判定を担う
 class Reservation
-  # コーチを指定して予約を確定
-  #: (Coach) -> void
+  # 二重予約の検知を DB のユニーク制約に委ねず、ここで判定する。
+  # 制約違反の例外を UI に出さないため
+  #
+  # @param coach [Coach] 担当コーチ
+  # @return [Reservation] 成立した予約
   def book(coach)
     coach
   end
@@ -210,8 +273,8 @@ assert_ok "declaration comments not suppressed"
 echo "== メソッド本体内のコメントは従来どおり指摘 =="
 run_write body_comment.rb '# 予約の重複検知と成立判定を担う
 class Reservation
-  # コーチを指定して予約を確定
-  #: (Coach) -> void
+  # @param coach [Coach] 担当コーチ
+  # @return [Reservation] 成立した予約
   def book(coach)
     # 予約を作成する
     coach
@@ -226,8 +289,8 @@ run_write detached_comment.rb '# 予約の重複検知と成立判定を担う
 class Reservation
   # 宣言から離れた見出しコメント
 
-  # コーチを指定して予約を確定
-  #: (Coach) -> void
+  # @param coach [Coach] 担当コーチ
+  # @return [Reservation] 成立した予約
   def book(coach)
     coach
   end
@@ -235,21 +298,20 @@ end
 '
 assert_flagged "detached comment" "実装内コメントの確認" "宣言から離れた見出しコメント"
 
-echo "== boilerplate と rbs_inline マジックコメントは抑制対象外 =="
+echo "== boilerplate は抑制対象外 =="
 run_write boilerplate.rb '# frozen_string_literal: true
-# rbs_inline: enabled
 
 # 予約の重複検知と成立判定を担う
 class Reservation
 end
 '
-assert_ok "boilerplate and magic comment"
+assert_ok "boilerplate"
 
 echo "== 本体だけの変更では宣言の欠落を指摘しない =="
 run_edit body_only.rb '# 予約の重複検知と成立判定を担う
 class Reservation
-  # コーチを指定して予約を確定
-  #: (Coach) -> void
+  # @param coach [Coach] 担当コーチ
+  # @return [Reservation] 成立した予約
   def book(coach)
     coach.reload
   end
@@ -257,21 +319,21 @@ end
 ' '    coach' '    coach.reload'
 assert_ok "body-only edit"
 
-echo "== 注釈の無い既存メソッドは、触っていなければ指摘しない =="
+echo "== YARD の無い既存メソッドは、触っていなければ指摘しない =="
 run_edit untouched.rb '# 予約の重複検知と成立判定を担う
 class Reservation
   def legacy_method
     1
   end
 
-  # コーチを指定して予約を確定
-  #: (Coach) -> void
+  # @param coach [Coach] 担当コーチ
+  # @return [Reservation] 成立した予約
   def book(coach)
     coach
   end
 end
-' '' '  # コーチを指定して予約を確定
-  #: (Coach) -> void
+' '' '  # @param coach [Coach] 担当コーチ
+  # @return [Reservation] 成立した予約
   def book(coach)
     coach
   end
@@ -281,8 +343,8 @@ assert_ok "untouched legacy method"
 echo "== ヒアドキュメントの式展開をコメントと誤認しない =="
 run_write heredoc.rb '# 予約の重複検知と成立判定を担う
 class Reservation
-  # 通知文面を組み立てる
-  #: (String) -> String
+  # @param name [String] 宛名
+  # @return [String] 本文
   def message(name)
     <<~TEXT
       #{name} 様
