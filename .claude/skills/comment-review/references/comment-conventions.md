@@ -6,10 +6,10 @@
 
 | 系統 | 対象 | 既定 | 適用規約 |
 |---|---|---|---|
-| 宣言系 | `class`・`module`・メソッド定義・`attr_*` に付くコメント | **書く** | 規約5 |
+| 宣言系 | `class`・`module`・メソッド定義・`attr_*` に付くコメント | **書く**（タグ） | 規約5 |
 | 実装系 | 上記以外（メソッド本体内・定数・処理の途中など） | **書かない** | 規約1〜4 |
 
-宣言系が既定「書く」なのは、クラスの責務とメソッドの契約が、クラス名・メソッド名だけでは表現しきれず、他のどの手段でも受け止められない情報だからである。実装系が既定「書かない」なのは規約1の理由による。
+宣言系が既定「書く」なのは、クラスの責務と引数・戻り値の意味が、クラス名・メソッド名だけでは表現しきれないからである。ただし既定「書く」の対象は YARD タグとクラスの責務であって、メソッドの散文ではない。メソッドの散文は規約1と同じ既定「書かない」に従い、WHY があるときだけ書く。
 
 規約6（文体）と規約7（同期）は両系統に適用する。
 
@@ -91,7 +91,7 @@ i += 1  # ヘッダ行をスキップするため先頭をずらす
 
 コードが実現する仕様をコメントで説明しない。「Whyを述べているから良いコメント」ではない——実装の選択理由（トレードオフ）以外の Why はコメントに書かない。仕様はクラス名・メソッド名・テストが語る。
 
-宣言系コメント（規約5）に書く責務と契約はこれとは別物。名前と型に表れない事前条件・副作用・戻り値の意味に限られ、実装が満たす仕様の説明に広げてはならない。
+宣言系コメント（規約5）の散文もこの規約を受ける。メソッドに書けるのは WHY だけで、WHAT と自明な WHY は書かない。
 
 ```ruby
 # 不可（仕様のナレーション。メソッド名とテストで表現できる）
@@ -116,52 +116,74 @@ user = User.active.find_by!(id: id)
 
 理由だけあってリンクが無いものも違反。出典が無いと、回避対象が解消されたときにワークアラウンドを畳めない。
 
-## 規約5. 宣言系コメントは必須
+## 規約5. 宣言系コメントは YARD 形式で書く
 
-宣言に付くコメントは既定で書く。Ruby では型注釈を [rbs-inline](https://github.com/soutaro/rbs-inline/wiki/Syntax-guide) の `#:` 形式で書く。他の言語では言語標準の形式（Python: docstring／JS・TS: JSDoc・TSDoc／Java: Javadoc／Go: doc comment）に従う。
+Ruby では [YARD](https://rubydoc.info/gems/yard/file/docs/Tags.md) のタグ（`@param`・`@return`・`@raise`）で書く。他の言語では言語標準の形式（Python: docstring／JS・TS: JSDoc・TSDoc／Java: Javadoc／Go: doc comment）に従う。
 
-| 対象 | 散文 | 型注釈 |
+| 対象 | 散文 | タグ |
 |---|---|---|
 | `class` / `module` | 必須（責務） | — |
-| public メソッド | 必須（責務と契約） | `#:` 必須 |
-| private / protected メソッド | 規約2に該当する場合のみ | `#:` 必須 |
-| `attr_reader` / `attr_writer` / `attr_accessor` | 規約2に該当する場合のみ | 行末 `#: Type` 必須 |
+| メソッド（public / private を問わず） | **WHY がある場合のみ** | `@param`（全引数）・`@return` 必須 |
+| `attr_reader` / `attr_writer` / `attr_accessor` | WHY がある場合のみ | `@return` 必須 |
+
+`initialize` とセッター（`name=`）には、YARD の慣習として `@return` を書かない。ブロック引数の `@param` も要求しない（`@yield` 系で書く流儀があるため）。
 
 ```ruby
 # 予約の重複検知と成立判定を担う
 class Reservation
-  attr_reader :starts_at #: Time
+  # @return [Time] 予約開始時刻
+  attr_reader :starts_at
 
-  # 指定コーチの同時刻の予約が無い場合にのみ成立。重複時は Conflict を投げる
-  #: (Coach, Time) -> Reservation
+  # 二重予約の検知を DB のユニーク制約に委ねず、ここで判定する。
+  # 制約違反の例外を UI に出さないため
+  #
+  # @param coach [Coach] 担当コーチ
+  # @param starts_at [Time] 予約開始時刻
+  # @return [Reservation] 成立した予約
+  # @raise [Conflict] 重複する予約がある場合
   def self.book(coach, starts_at)
   end
 
   private
 
-  #: () -> bool
+  # @return [Boolean]
   def slot_available?
   end
 end
 ```
 
-**散文に書くのは責務と契約**。事前条件・副作用・戻り値の意味・投げる例外のうち、名前と型で表現しきれないもの。メソッド名の言い換えは規約3の違反であり、宣言系でも許されない。
+### メソッドの散文は WHY だけを書く
+
+**WHAT と自明な WHY は書かない。** メソッドが何をするかはメソッド名とタグが語る。書くのは規約2の2カテゴリ（設計判断の根拠・非自明な制約）に該当するものだけで、該当しなければ散文は書かずタグだけにする。
 
 ```ruby
-# 不可（メソッド名の言い換え）
+# 不可（WHAT。メソッド名の言い換え）
 # ユーザーを取得する
-#: (Integer) -> User
+# @param id [Integer]
+# @return [User]
 def find_user(id)
 
-# 可（名前と型に表れない契約）
+# 不可（自明な WHY。書く価値がない）
+# ユーザーが必要なので取得する
+# @param id [Integer]
+# @return [User]
+def find_user(id)
+
+# 可（非自明な制約）
 # 退会済みでも引ける。表示可否の判定は呼び出し側の責務
-#: (Integer) -> User
+# @param id [Integer]
+# @return [User]
+def find_user(id)
+
+# 可（WHY が無いので散文は書かない）
+# @param id [Integer]
+# @return [User]
 def find_user(id)
 ```
 
-型注釈は `rbs inline` で RBS を生成し Steep で検査して初めて実装との一致が保証される。ツールチェーン未導入のプロジェクトでは、注釈は検証されないため規約7（同期）の負担がそのまま残る。
+クラス・モジュールの散文はこの限りではなく、責務を述べるものを必ず書く。何のために存在するクラスかはクラス名だけでは表現しきれない。
 
-`*_spec.rb` と `db/migrate/` は宣言系コメントの対象外。テストケースの記述とマイグレーションには責務・契約を書く意味がない。
+`*_spec.rb`・`db/migrate/`・クラスやモジュールの外にあるトップレベルの `def` は宣言系コメントの対象外。トップレベル定義は公開APIの面を持たない（スクリプトのヘルパーが該当する）。
 
 ## 規約6. コメントは日本語・体言止めで書く
 
